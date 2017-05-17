@@ -3,12 +3,14 @@
 // along with the Go tools plugin.
 
 def majVersion = '1'
-def minVersion = '0'
-def relVersion = '2'
+def minVersion = '1'
+def relVersion = '0'
 
 def version = "${majVersion}.${minVersion}.${relVersion}.${env.BUILD_NUMBER}"
-def packageName = "gossamer-${version}.tar.gz"
-def packageNameLatest = "gossamer-latest.tar.gz"
+def packageNameNix = "gossamer-linux-amd64-${version}.tar.gz"
+def packageNameNixLatest = "gossamer-linux-amd64-latest.tar.gz"
+def packageNameMac = "gossamer-darwin-amd64-${version}.tar.gz"
+def packageNameMacLatest = "gossamer-darwin-amd64-latest.tar.gz"
 def bucketPath = "builds/"
 
 try {
@@ -37,24 +39,35 @@ try {
                     sh "go get github.com/aws/aws-sdk-go/aws"
                     sh "go get github.com/aws/aws-sdk-go/aws/ec2metadata"
                     sh "go get github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+                    sh "go get github.com/aws/aws-sdk-go/aws/credentials"
                     sh "go get github.com/inconshreveable/log15"
                 }
             }
-            stage ('build') {
-                withEnv(["GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
+            stage ('build nix') {
+                withEnv(["GOOS=linux","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
                     sh "go build -ldflags \"-X main.version=${version}\" gossamer.go"
                 }
+                stage ('package') {
+                    sh "tar zcfv ${packageNameNix} gossamer"
+                }
             }
-            stage ('package') {
-                sh "tar zcfv ${packageName} gossamer"
+            stage ('build mac') {
+                withEnv(["GOOS=darwin","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
+                    sh "go build -ldflags \"-X main.version=${version}\" gossamer.go"
+                }
+                stage ('package') {
+                    sh "tar zcfv ${packageNameMac} gossamer"
+                }
             }
             stage ('artifact upload') {
                 awsIdentity()
-                s3Upload(file:"${packageName}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageName}")
-                s3Upload(file:"${packageName}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameLatest}")
+                s3Upload(file:"${packageNameNix}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameNix}")
+                s3Upload(file:"${packageNameNix}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameNixLatest}")
+                s3Upload(file:"${packageNameMac}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameMac}")
+                s3Upload(file:"${packageNameMac}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameMacLatest}")
             }
             stage ('notify') {
-                slackSend channel: '#cloudpod-feed', color: 'good', message: "gossamer build SUCCESS ${env.BUILD_URL}", teamDomain: "${SLACKORG}", token:"${SLACKTOKEN}"  
+                slackSend channel: '#cloudpod-feed', color: 'good', message: "gossamer build SUCCESS. Mac package: https://s3.amazonaws.com/${S3BUCKET}/${bucketPath}${packageNameMacLatest}, Nix package: https://s3.amazonaws.com/${S3BUCKET}/${bucketPath}${packageNameNixLatest}", teamDomain: "${SLACKORG}", token:"${SLACKTOKEN}"  
             }
         }
     }
