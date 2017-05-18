@@ -543,7 +543,10 @@ func main() {
 	}
 	// figure out which mode we need to run in
 	opts.mode = modeDecider(&opts)
-
+	if opts.mode == "mfa" {
+		logger.Warn("config mismatch, cannot run as daemon in 'mfa' mode, unsetting daemonFlag")
+		opts.daemonFlag = false
+	}
 	if opts.daemonFlag {
 		// Go signal notification works by sending `os.Signal`
 		// values on a channel. We'll create a channel to
