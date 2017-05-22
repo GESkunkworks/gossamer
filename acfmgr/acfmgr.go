@@ -69,7 +69,7 @@ import (
 func NewCredFileSession(filename string) (*CredFile, error) {
 	cf := CredFile{filename: filename,
 		currBuff: new(bytes.Buffer),
-		reSep:    regexp.MustCompile(`\[\.*\]`),
+		reSep:    regexp.MustCompile(`\[.*\]`),
 	}
 	err := cf.loadFile()
 	if err != nil {

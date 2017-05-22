@@ -4,7 +4,7 @@
 
 def majVersion = '1'
 def minVersion = '1'
-def relVersion = '0'
+def relVersion = '1'
 
 def version = "${majVersion}.${minVersion}.${relVersion}.${env.BUILD_NUMBER}"
 def packageNameNix = "gossamer-linux-amd64-${version}.tar.gz"
@@ -43,20 +43,25 @@ try {
                     sh "go get github.com/inconshreveable/log15"
                 }
             }
+            stage ('run unit tests') {
+                withEnv(["GOOS=linux","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
+                    sh "go test ./... -v"
+                }
+            }
             stage ('build nix') {
                 withEnv(["GOOS=linux","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go build -ldflags \"-X main.version=${version}\" gossamer.go"
+                    sh "go build -o ./build/gossamer -ldflags \"-X main.version=${version}\""
                 }
                 stage ('package') {
-                    sh "tar zcfv ${packageNameNix} gossamer"
+                    sh "cd ./build && tar zcfv ../${packageNameNix} . && cd .."
                 }
             }
             stage ('build mac') {
                 withEnv(["GOOS=darwin","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go build -ldflags \"-X main.version=${version}\" gossamer.go"
+                    sh "go build -o ./build/gossamer -ldflags \"-X main.version=${version}\""
                 }
                 stage ('package') {
-                    sh "tar zcfv ${packageNameMac} gossamer"
+                    sh "cd ./build && tar zcfv ../${packageNameMac} . && cd .."
                 }
             }
             stage ('artifact upload') {

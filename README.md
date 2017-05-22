@@ -1,3 +1,5 @@
+![Alt text](gossamer.jpg?raw=true "gossamer")
+
 # gossamer
 CLI app to help you manage assuming roles across AWS accounts.
 
@@ -144,8 +146,8 @@ go get github.com/aws/aws-sdk-go/aws/ec2metadata
 go get github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds
 go get github.com/aws/aws-sdk-go/aws/credentials
 go get github.com/inconshreveable/log15
-go build -ldflags "-X main.version=v0.0.0" gossamer.go
-sudo mv gossamer.go /usr/bin/gossamer
+go build -o ./build/gossamer -ldflags "-X main.version=v0.0.0"
+sudo mv ./build/gossamer /usr/bin/gossamer
 ```
 
 ## Usage

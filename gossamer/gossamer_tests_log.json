@@ -1,0 +1,15 @@
+{"determined mode":"mfa","lvl":"info","msg":"MODE","t":"2017-05-22T10:31:00.097758687-04:00"}
+{"determined mode":"instance-profile","lvl":"info","msg":"MODE","t":"2017-05-22T10:31:00.098024228-04:00"}
+{"determined mode":"profile-only","lvl":"info","msg":"MODE","t":"2017-05-22T10:31:00.098110372-04:00"}
+{"lvl":"info","msg":"Scanning credentials file...","t":"2017-05-22T10:31:00.101501969-04:00"}
+{"TokenExpires":"2017-05-17 23:12:25 +0000 UTC","lvl":"info","msg":"Detected expiration string","t":"2017-05-22T10:31:00.10162477-04:00"}
+{"ExpiresIn":-6678.5850277698,"lvl":"info","msg":"Token expiration check","renewThreshold":10,"t":"2017-05-22T10:31:00.101666739-04:00"}
+{"determined mode":"mfa","lvl":"info","msg":"MODE","t":"2017-05-22T10:56:36.166440354-04:00"}
+{"determined mode":"instance-profile","lvl":"info","msg":"MODE","t":"2017-05-22T10:56:36.167406318-04:00"}
+{"determined mode":"profile-only","lvl":"info","msg":"MODE","t":"2017-05-22T10:56:36.167497933-04:00"}
+{"determined mode":"mfa","lvl":"info","msg":"MODE","t":"2017-05-22T10:59:03.002132778-04:00"}
+{"determined mode":"instance-profile","lvl":"info","msg":"MODE","t":"2017-05-22T10:59:03.002435311-04:00"}
+{"determined mode":"profile-only","lvl":"info","msg":"MODE","t":"2017-05-22T10:59:03.002539731-04:00"}
+{"lvl":"info","msg":"Scanning credentials file...","t":"2017-05-22T10:59:03.006644186-04:00"}
+{"TokenExpires":"2017-05-17 23:12:25 +0000 UTC","lvl":"info","msg":"Detected expiration string","t":"2017-05-22T10:59:03.00700855-04:00"}
+{"ExpiresIn":-6706.6334511356,"lvl":"info","msg":"Token expiration check","renewThreshold":10,"t":"2017-05-22T10:59:03.007068712-04:00"}
