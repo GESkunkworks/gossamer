@@ -19,7 +19,7 @@ func main() {
 	var outFile, roleArn, logFile,
 		profile, serialNumber, tokenCode,
 		region, loglevel, rolesFile,
-		profileEntryName string
+		profileEntryName, modeForce string
 	var sessionDuration, renewThresholdInt64, secondsInt64 int64
 	var versionFlag, daemonFlag, forceRefresh, purgeCredFileFlag bool
 	roleSessionName := "gossamer"
@@ -32,6 +32,7 @@ func main() {
 	flag.StringVar(&tokenCode, "tokencode", "", "Token code of mfa device.")
 	flag.StringVar(&region, "region", "us-east-1", "Region mandatory in mfa and profile mode")
 	flag.StringVar(&loglevel, "loglevel", "info", "Log level (info or debug)")
+	flag.StringVar(&modeForce, "modeforce", "", "Force a specific mode (e.g., 'mfa_noassume')")
 	flag.StringVar(&profileEntryName, "entryname", "gossamer", "when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]')")
 	flag.Int64Var(&sessionDuration, "duration", 3600, "Duration of token in seconds. (min=900, max=3600) ")
 	flag.Int64Var(&renewThresholdInt64, "t", 10, " threshold in minutes.")
@@ -57,7 +58,8 @@ func main() {
 			panic(err)
 		}
 	}
-	if roleArn == "" && rolesFile == "" {
+	if roleArn == "" && rolesFile == "" && modeForce != "mfa_noassume" {
+		goslogger.Loggo.Info("modeForce info", "modeForce", modeForce)
 		goslogger.Loggo.Error("must specify role ARN with '-a' or '-rolesfile'. Exiting.")
 		os.Exit(0)
 	}
@@ -66,7 +68,13 @@ func main() {
 		acct := gossamer.Account{RoleArn: roleArn, AccountName: profileEntryName, Region: region}
 		accounts = append(accounts, acct)
 	}
-	if len(accounts) == 0 {
+	if modeForce == "mfa_noassume" {
+		// just building one account struct
+		acct := gossamer.Account{RoleArn: "NA", AccountName: profileEntryName, Region: region}
+		accounts = append(accounts, acct)
+	}
+	if len(accounts) == 0 && modeForce != "mfa_noassume" {
+		goslogger.Loggo.Info("modeForce info", "modeForce", modeForce)
 		goslogger.Loggo.Error("must specify role ARN with '-a' or '-rolesfile'. Exiting.")
 		os.Exit(0)
 	}
@@ -86,6 +94,7 @@ func main() {
 	goslogger.Loggo.Info("OPTIONS", "parsed serialNumber", serialNumber)
 	goslogger.Loggo.Info("OPTIONS", "parsed tokenCode", tokenCode)
 	goslogger.Loggo.Info("OPTIONS", "parsed forceRefresh", forceRefresh)
+	goslogger.Loggo.Info("OPTIONS", "parsed modeForce", modeForce)
 	// recast some vars for time.Duration use later
 	renewThreshold := float64(renewThresholdInt64)
 	seconds := float64(secondsInt64)
@@ -110,9 +119,13 @@ func main() {
 		os.Exit(0)
 	}
 	// figure out which mode we need to run in
-	opts.Mode = gossamer.ModeDecider(&opts)
-	if opts.Mode == "mfa" {
-		goslogger.Loggo.Warn("config mismatch, cannot run as daemon in 'mfa' mode, unsetting daemonFlag")
+	if modeForce != "" {
+		opts.Mode = modeForce
+	} else {
+		opts.Mode = gossamer.ModeDecider(&opts)
+	}
+	if opts.Mode == "mfa" || opts.Mode == "mfa_noassume" {
+		goslogger.Loggo.Warn("config mismatch, cannot run as daemon in 'mfa*' mode, unsetting daemonFlag")
 		opts.DaemonFlag = false
 	}
 	if opts.DaemonFlag {
@@ -149,6 +162,12 @@ func sigCatcher(sigs chan os.Signal, done chan bool) {
 	done <- true
 }
 
+func handleGenErr(err error) {
+	if err != nil {
+		goslogger.Loggo.Error("Error generating cred", "error", err)
+	}
+}
+
 // runner, in daemon mode: loops through continuously checking for credential expiration in the creds file
 // in standalone mode it just checks once
 func runner(opts *gossamer.RunnerOptions) {
@@ -162,20 +181,26 @@ func runner(opts *gossamer.RunnerOptions) {
 			switch opts.Mode {
 			case "mfa":
 				err = gossamer.GenerateNewMfa(opts, opts.Accounts)
+			case "mfa_noassume":
+				err = gossamer.GenerateNewMfa(opts, opts.Accounts)
+			case "profile-only":
+				err = gossamer.GenerateNewProfile(opts, opts.Accounts)
 			default:
 				for _, acct := range opts.Accounts {
+					goslogger.Loggo.Info("Attempting assumption", "ARN", acct.RoleArn)
 					err = gossamer.GenerateNewMeta(opts, acct)
+					handleGenErr(err)
+					time.Sleep(time.Second * time.Duration(1))
 				}
 			}
-			if err != nil {
-				panic(err)
-			}
-			goslogger.Loggo.Info("Wrote new credentials file.", "path", opts.OutFile)
+			handleGenErr(err)
 		} else {
 			goslogger.Loggo.Info("Token not yet expired. Exiting with no action.")
 		}
 		if opts.DaemonFlag {
-			time.Sleep(time.Second * time.Duration(opts.Seconds))
+			duration := time.Second * time.Duration(opts.Seconds)
+			goslogger.Loggo.Info("Sleeping", "seconds", duration)
+			time.Sleep(duration)
 		} else {
 			break
 		}

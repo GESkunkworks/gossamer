@@ -104,6 +104,7 @@ func haveCredsWillWrite(creds *sts.Credentials, opts *RunnerOptions, instancePro
 	credName := "[" + acctCurrent.AccountName + "]"
 	c.NewEntry(credName, credContents)
 	err = c.AssertEntries()
+	goslogger.Loggo.Info("Wrote new credentials file.", "path", opts.OutFile)
 	if err != nil {
 		return err
 	}
@@ -188,36 +189,16 @@ func GenerateNewProfile(opts *RunnerOptions, accounts []Account) (err error) {
 	}))
 	svcProfile := sts.New(sessProfile)
 
-	gstInput := &sts.GetSessionTokenInput{
-		DurationSeconds: &opts.SessionDuration,
-	}
-
-	gstOutput, err := svcProfile.GetSessionToken(gstInput)
-	if err != nil {
-		goslogger.Loggo.Crit("Error in getSessionToken", "error", err)
-		os.Exit(1)
-	}
-	// build the credentials.cred object manually because the structs are diff.
-	statCreds := credentials.NewStaticCredentials(
-		*gstOutput.Credentials.AccessKeyId,
-		*gstOutput.Credentials.SecretAccessKey,
-		*gstOutput.Credentials.SessionToken)
-	sessNew := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Credentials: statCreds},
-	}))
-	// now using the new session we can open another sts session
-	svcNew := sts.New(sessNew)
-
 	for _, acct := range accounts {
 		goslogger.Loggo.Debug("working on account",
 			"AccountName", acct.AccountName,
 			"RoleArn", acct.RoleArn)
-		err = assumer(svcNew, opts, acct)
+		err = assumer(svcProfile, opts, acct)
 		if err != nil {
 			return err
 		}
 	}
-	goslogger.Loggo.Info("wrote credentials", "numberOfCredentialsWritten", len(accounts))
+	goslogger.Loggo.Info("GenerateNewProfile wrote credentials", "numberOfCredentialsWritten", len(accounts))
 	return err
 }
 
@@ -245,9 +226,10 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 	}
 
 	gstOutput, err := svcProfile.GetSessionToken(gstInput)
+	// goslogger.Loggo.Debug("Get session token result...", "gstOutput.Credentials", gstOutput.Credentials)
 	if err != nil {
 		goslogger.Loggo.Crit("Error in getSessionToken", "error", err)
-		os.Exit(1)
+		return err
 	}
 	// build the credentials.cred object manually because the structs are diff.
 	statCreds := credentials.NewStaticCredentials(
@@ -264,12 +246,16 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 		goslogger.Loggo.Debug("working on account",
 			"AccountName", acct.AccountName,
 			"RoleArn", acct.RoleArn)
-		err = assumer(svcMfa, opts, acct)
+		if opts.Mode == "mfa" {
+			err = assumer(svcMfa, opts, acct)
+		} else if opts.Mode == "mfa_noassume" {
+			err = haveCredsWillWrite(gstOutput.Credentials, opts, "NA", acct)
+		}
 		if err != nil {
 			return err
 		}
 	}
-	goslogger.Loggo.Info("wrote credentials", "numberOfCredentialsWritten", len(accounts))
+	goslogger.Loggo.Info("GenerateNewMfa wrote credentials", "numberOfCredentialsWritten", len(accounts))
 	return err
 }
 
@@ -370,15 +356,6 @@ func ReadExpire(outfile string, renewThreshold float64) (expired bool, err error
 	return true, err
 }
 
-// RunnerOptions type provides easier arguments to the runner function
-type RunnerOptions struct {
-	OutFile, RoleSessionName, Mode, Profile, SerialNumber, TokenCode, Region string
-	RenewThreshold, Seconds                                                  float64
-	SessionDuration                                                          int64
-	DaemonFlag, Force                                                        bool
-	Accounts                                                                 []Account
-}
-
 // ModeDecider looks at the given input parameters and tries to decide
 // the user's intention. Right now this is just deciding between
 // using MFA or using instance-profile.
@@ -414,6 +391,16 @@ type Account struct {
 	RoleArn     string
 	AccountName string
 	Region      string
+	RoundRobin  bool
+}
+
+// RunnerOptions type provides easier arguments to the runner function
+type RunnerOptions struct {
+	OutFile, RoleSessionName, Mode, Profile, SerialNumber, TokenCode, Region string
+	RenewThreshold, Seconds                                                  float64
+	SessionDuration                                                          int64
+	DaemonFlag, Force                                                        bool
+	Accounts                                                                 []Account
 }
 
 // DeleteCredFileEntries deletes all credentials
