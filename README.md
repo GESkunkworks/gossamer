@@ -87,7 +87,7 @@ For the example of using the EC2 instance profile in one account to assume-role 
 }
 ```
 
-### mfa
+### mfa with assume-role
 The mfa mode lets you assume multiple roles using a seed starter profile and input list of json (see `rolesfile_sample.json`)
 
 Sample Command:
@@ -136,6 +136,14 @@ aws_secret_access_key = /P8iimafakesakJPC5bqQHDoHO7Cwd6Vq
 aws_session_token = FbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglongtoken==
 
 ```
+
+### mfa without assume-role
+Assumes you have IAM key/secret in your creds file under the name `skunk` and uses it along with the MFA information to make the `skunky` entry in the same creds file. 
+
+Can only be activated via the `-modeforce mfa_noassume` flag whereas the other modes are auto-detected based on input. 
+Example:
+`./gossamer -o ~/.aws/credentials -profile skunk -entryname skunky -serialnumber arn:aws:iam::543215678910:mfa/jdoe -modeforce mfa_noassume -tokencode 852090`
+
 ## Build/Run from Source
 
 ```

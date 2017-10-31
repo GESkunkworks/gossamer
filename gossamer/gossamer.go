@@ -127,8 +127,8 @@ func assumer(profile *sts.STS, opts *RunnerOptions, acct Account) error {
 
 	// Log the response data. Truncate for security
 	goslogger.Loggo.Info("Response from AssumeRole", "AccessKeyId", *resp.Credentials.AccessKeyId,
-		"SecretAccessKey", fmt.Sprintf("%.10s...(redacted)", *resp.Credentials.SecretAccessKey),
-		"SessionToken", fmt.Sprintf("%.30s...(redacted)", *resp.Credentials.SessionToken),
+		"AccountName", fmt.Sprintf("%s", acct.AccountName),
+		"RoleArn", fmt.Sprintf("%s", acct.RoleArn),
 		"Expiration", resp.Credentials.Expiration.String())
 
 	instanceProfileArn := "NA"
@@ -243,7 +243,7 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 	svcMfa := sts.New(sessMfa)
 
 	for _, acct := range accounts {
-		goslogger.Loggo.Debug("working on account",
+		goslogger.Loggo.Info("working on account",
 			"AccountName", acct.AccountName,
 			"RoleArn", acct.RoleArn)
 		if opts.Mode == "mfa" {
@@ -252,11 +252,17 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 			err = haveCredsWillWrite(gstOutput.Credentials, opts, "NA", acct)
 		}
 		if err != nil {
-			return err
+			handleGenErr(err)
 		}
 	}
 	goslogger.Loggo.Info("GenerateNewMfa wrote credentials", "numberOfCredentialsWritten", len(accounts))
 	return err
+}
+
+func handleGenErr(err error) {
+	if err != nil {
+		goslogger.Loggo.Error("Error generating cred", "error", err)
+	}
 }
 
 // GenerateNewMeta builds a credentials type from instance metadata
@@ -297,8 +303,8 @@ func GenerateNewMeta(opts *RunnerOptions, acctCurrent Account) (errr error) {
 
 	// Log the response data. Truncate for security
 	goslogger.Loggo.Info("Response from AssumeRole", "AccessKeyId", *resp.Credentials.AccessKeyId,
-		"SecretAccessKey", fmt.Sprintf("%.10s...(redacted)", *resp.Credentials.SecretAccessKey),
-		"SessionToken", fmt.Sprintf("%.30s...(redacted)", *resp.Credentials.SessionToken),
+		"AccountName", fmt.Sprintf("%s", acctCurrent.AccountName),
+		"RoleArn", fmt.Sprintf("%s", acctCurrent.RoleArn),
 		"Expiration", resp.Credentials.Expiration.String())
 	errr = haveCredsWillWrite(resp.Credentials, opts, instanceProfileArn, acctCurrent)
 	return errr
@@ -363,23 +369,17 @@ func ModeDecider(opts *RunnerOptions) (mode string) {
 	goslogger.Loggo.Debug("entered function", "function", "modeDecider")
 	var reModeMfa = regexp.MustCompile(`[0-9]{6}`)
 	var reModeProfile = regexp.MustCompile(`\w{1,}`)
-	reSerialString := `(\w.*:\w.*:\w.*::\d.*:mfa.*)|(\w{4}\d{8})`
-	var reModeSerial = regexp.MustCompile(reSerialString)
 	goslogger.Loggo.Debug("modeDecider", "reModeMfa match?", reModeMfa.MatchString(opts.TokenCode))
 	goslogger.Loggo.Debug("modeDecider", "reModeProfile match?", reModeProfile.MatchString(opts.Profile))
-	goslogger.Loggo.Debug("modeDecider", "reModeSerial match?", reModeSerial.MatchString(opts.SerialNumber))
 	// determine which mode we're going to run in
 	mode = "instance-profile"
 	switch {
-	case reModeMfa.MatchString(opts.TokenCode) && reModeProfile.MatchString(opts.Profile) && reModeSerial.MatchString(opts.SerialNumber):
+	case reModeMfa.MatchString(opts.TokenCode) && reModeProfile.MatchString(opts.Profile):
 		mode = "mfa"
 	case reModeProfile.MatchString(opts.Profile) && opts.SerialNumber == "" && opts.TokenCode == "":
 		mode = "profile-only"
 	default:
 		mode = "instance-profile"
-	}
-	if opts.SerialNumber != "" && mode != "mfa" {
-		goslogger.Loggo.Warn("Mode uncertainty", "detected non-null value for serial", opts.SerialNumber, "but did not match regex", reSerialString)
 	}
 	goslogger.Loggo.Info("MODE", "determined mode", mode)
 	return mode

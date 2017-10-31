@@ -1,20 +1,22 @@
 // pipeline script to build gossamer and push build to s3 bucket
 // depends on credentials being set up in Jenkins ahead of time
-// along with the Go tools plugin.
+// and docker to be installed on agent
 
 def majVersion = '1'
-def minVersion = '1'
-def relVersion = '1'
+def minVersion = '2'
+def relVersion = '2'
 
 def version = "${majVersion}.${minVersion}.${relVersion}.${env.BUILD_NUMBER}"
 def packageNameNix = "gossamer-linux-amd64-${version}.tar.gz"
 def packageNameNixLatest = "gossamer-linux-amd64-latest.tar.gz"
 def packageNameMac = "gossamer-darwin-amd64-${version}.tar.gz"
 def packageNameMacLatest = "gossamer-darwin-amd64-latest.tar.gz"
+def packageNameWindows = "gossamer-windows-amd64-${version}.tar.gz"
+def packageNameWindowsLatest = "gossamer-windows-amd64-latest.tar.gz"
 def bucketPath = "builds/"
 
 try {
-    node {
+    node ("master"){
         withCredentials([string(credentialsId: 'cloudpod-slack-token', variable: 'SLACKTOKEN'),
                          string(credentialsId: 'cloudpod-slack-org', variable: 'SLACKORG'),
                          string(credentialsId: 'gossamer-builds-s3-bucket', variable: 'S3BUCKET')]) 
@@ -25,52 +27,12 @@ try {
             stage ('checkout source') {
                 checkout scm
             }
-            stage ('golang env setup') {
-                // Install the desired Go version
-                // Export environment variables pointing to the directory where Go was installed
-                withEnv(["GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh 'go version'
-                }
-            }
-            stage ('dependencies') {
-                withEnv(["GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go get github.com/aws/aws-sdk-go/aws/session"
-                    sh "go get github.com/aws/aws-sdk-go/service/sts"
-                    sh "go get github.com/aws/aws-sdk-go/aws"
-                    sh "go get github.com/aws/aws-sdk-go/aws/ec2metadata"
-                    sh "go get github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
-                    sh "go get github.com/aws/aws-sdk-go/aws/credentials"
-                    sh "go get github.com/inconshreveable/log15"
-                }
-            }
-            stage ('run unit tests') {
-                withEnv(["GOOS=linux","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go test ./... -v"
-                }
-            }
-            stage ('build nix') {
-                withEnv(["GOOS=linux","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go build -o ./build/gossamer -ldflags \"-X main.version=${version}\""
-                }
-                stage ('package') {
-                    sh "cd ./build && tar zcfv ../${packageNameNix} . && cd .."
-                }
-            }
-            stage ('build mac') {
-                withEnv(["GOOS=darwin","GOARCH=amd64","GOROOT=${tool 'golang180'}", "PATH+GO=${tool 'golang180'}/bin"]) {
-                    sh "go build -o ./build/gossamer -ldflags \"-X main.version=${version}\""
-                }
-                stage ('package') {
-                    sh "cd ./build && tar zcfv ../${packageNameMac} . && cd .."
-                }
-            }
-            stage ('artifact upload') {
-                awsIdentity()
-                s3Upload(file:"${packageNameNix}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameNix}")
-                s3Upload(file:"${packageNameNix}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameNixLatest}")
-                s3Upload(file:"${packageNameMac}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameMac}")
-                s3Upload(file:"${packageNameMac}", bucket: "${S3BUCKET}", path:"${bucketPath}${packageNameMacLatest}")
-            }
+           stage ('build build docker') {
+               sh "docker build . -t gossbuilder"
+           }
+           stage ('run build docker') {
+               sh "docker run gossbuilder ./build.sh ${version} ${packageNameNix} ${packageNameMac} ${packageNameWindows} ${packageNameNixLatest} ${packageNameMacLatest} ${packageNameWindowsLatest} ${S3BUCKET} ${bucketPath}"
+           }
             stage ('notify') {
                 slackSend channel: '#cloudpod-feed', color: 'good', message: "gossamer build SUCCESS. Mac package: https://s3.amazonaws.com/${S3BUCKET}/${bucketPath}${packageNameMacLatest}, Nix package: https://s3.amazonaws.com/${S3BUCKET}/${bucketPath}${packageNameNixLatest}", teamDomain: "${SLACKORG}", token:"${SLACKTOKEN}"  
             }

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"../goslogger"
@@ -114,6 +115,43 @@ func TestModeDeciderMFA(t *testing.T) {
 	}
 }
 
+func TestMFASerialNoValidation(t *testing.T) {
+	ropts := buildRunnerOpts()
+	ropts.Profile = "iam"
+	ropts.SerialNumber = "ABC000123FT"
+	ropts.DaemonFlag = false
+	ropts.TokenCode = "123456"
+	acct := Account{RoleArn: "arn:aws:iam::123456789101:role/prod-role",
+		AccountName: "prod-account",
+		Region:      "us-east-1"}
+	ropts.OutFile = "./gossamer_test_MFA.txt"
+	ropts.Accounts = append(ropts.Accounts, acct)
+	got := ModeDecider(&ropts)
+	want := "mfa"
+	if got != want {
+		t.Errorf("Mode detection failed. Wanted: '%s', Got: '%s'", want, got)
+	}
+}
+func TestMFABadCreds(t *testing.T) {
+	ropts := buildRunnerOpts()
+	ropts.Profile = "iam"
+	ropts.SerialNumber = "GADT000012345"
+	ropts.DaemonFlag = false
+	ropts.TokenCode = "123456"
+	acct := Account{RoleArn: "arn:aws:iam::123456789101:role/prod-role",
+		AccountName: "prod-account",
+		Region:      "us-east-1"}
+	ropts.OutFile = "./gossamer_test_MFA.txt"
+	err := generateTestCredFile(ropts.OutFile, "iam")
+	ropts.Accounts = append(ropts.Accounts, acct)
+	ropts.Mode = ModeDecider(&ropts)
+	err = GenerateNewMfa(&ropts, ropts.Accounts)
+	expectedErr := "ExpiredToken: The security token included in the request is expired"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected: '%s', Got: '%s'", expectedErr, err)
+	}
+}
+
 func TestModeDeciderInstanceProfile(t *testing.T) {
 	ropts := buildRunnerOpts()
 	ropts.Accounts = []Account{}
@@ -147,9 +185,38 @@ func TestModeDeciderProfileOnly(t *testing.T) {
 	}
 }
 
+func TestModeDeciderMfaNoAssume(t *testing.T) {
+	ropts := buildRunnerOpts()
+	ropts.Profile = "saml"
+	ropts.Accounts = []Account{}
+	ropts.OutFile = "./gossamer_test_mode_decider.txt"
+	ropts.DaemonFlag = false
+	ropts.Mode = "mfa_noassume"
+	got := ModeDecider(&ropts)
+	want := "profile-only"
+	if got != want {
+		t.Errorf("Mode detection failed. Wanted: '%s', Got: '%s'", want, got)
+	}
+}
+
 func generateTestExpireFile(filename string, expires string) error {
 	var b bytes.Buffer
 	_, err := b.WriteString(expires)
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = writeBufferToFile(filename, &b)
+	return err
+}
+
+func generateTestCredFile(filename string, entryName string) error {
+	var b bytes.Buffer
+	_, err := b.WriteString("[" + entryName + "]\n")
+	_, err = b.WriteString("output = json\n")
+	_, err = b.WriteString("region = us-east-1\n")
+	_, err = b.WriteString("aws_access_key_id = ASIAJASDFEFOIFJCAFXAQ\n")
+	_, err = b.WriteString("aws_secret_access_key = uHOawoeifaowinafoiawi/eoia asdf/14bocE1pNtd4\n")
+	_, err = b.WriteString("aws_session_token = FQoDYXdzEN///////////wEaDBBebVjaMasRQbNcYCKvAZfpQw5TGWUSydHYx5rrMx1royMnMJx+ZK781kiFbifoAh1p5DXWOeY1xrMX93iw3uDEOPMvN5lTNWACOsRqXSgCkbHY/HYD13NnZjQUZ/bGQJMbFxpQ6Z+LuaL5nJY0oUc54NPRTVZTUqTu1ePnnJopYr/+9V7elY+KP0DSNDFWtXg4Z6/OjJPJoSKE8SYN3KgpVJ2gVUC6xfjEtzT7PcvhY+H1j2iTKNdICoD4KjMo5feXyQU=\n")
 	if err != nil {
 		fmt.Println(err)
 	}

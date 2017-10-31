@@ -1,9 +1,11 @@
 {
 	"Roles": [{
 		"RoleArn": "arn:aws:iam::123456789101:role/prod-role",
-		"AccountName": "prod-account"
+		"AccountName": "prod-account",
+        "Region": "us-east-1"
 	}, {
 		"RoleArn": "arn:aws:iam::110987654321:role/dev-role",
-		"AccountName": "dev-account"
+		"AccountName": "dev-account",
+        "Region": "us-west-1"
 	}]
 }

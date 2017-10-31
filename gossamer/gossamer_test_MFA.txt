@@ -1,0 +1,6 @@
+[iam]
+output = json
+region = us-east-1
+aws_access_key_id = ASIAJASDFEFOIFJCAFXAQ
+aws_secret_access_key = uHOawoeifaowinafoiawi/eoia asdf/14bocE1pNtd4
+aws_session_token = FQoDYXdzEN///////////wEaDBBebVjaMasRQbNcYCKvAZfpQw5TGWUSydHYx5rrMx1royMnMJx+ZK781kiFbifoAh1p5DXWOeY1xrMX93iw3uDEOPMvN5lTNWACOsRqXSgCkbHY/HYD13NnZjQUZ/bGQJMbFxpQ6Z+LuaL5nJY0oUc54NPRTVZTUqTu1ePnnJopYr/+9V7elY+KP0DSNDFWtXg4Z6/OjJPJoSKE8SYN3KgpVJ2gVUC6xfjEtzT7PcvhY+H1j2iTKNdICoD4KjMo5feXyQU=
