@@ -84,7 +84,7 @@ func haveCredsWillWrite(creds *sts.Credentials, opts *RunnerOptions, instancePro
 		SessionToken:    *creds.SessionToken,
 		Expiration:      creds.Expiration.String(),
 		Generated:       time.Now().String(),
-		Region:          opts.Region,
+		Region:          acctCurrent.Region,
 		ExpiresToken:    expiresToken,
 		InstanceRoleARN: instanceProfileArn,
 		AssumeRoleARN:   acctCurrent.RoleArn,
