@@ -8,9 +8,26 @@ Two primary use cases:
 * Can run as a service to continuously build aws credentials file with sts assume-role token based on the instance profile.
 ** For example you can use an instance profile role to assume-role in another AWS account.
 
+## Installation
+Download a pre-built binary from the releases or you can build from source.
 
+### Build/Run from Source
+
+```
+go get github.com/rendicott/gossamer
+cd $GOPATH/src/github.com/rendicott/gossamer
+go build -o gossamer -ldflags "-X main.version=v0.0.0"
+sudo mv gossamer /usr/bin/gossamer
+```
 
 ## Modes
+There are three primary modes with `gossamer` that the program tries to auto-detect based on the given inputs. 
+
+* instance-profile only
+* assume-role with MFA
+* MFA only, no assume-role
+
+If it fails to detect the mode properly you can always specify the mode with the `-modeforce` flag. 
 
 ### profile-only
 Sample command:
@@ -144,58 +161,46 @@ Can only be activated via the `-modeforce mfa_noassume` flag whereas the other m
 Example:
 `./gossamer -o ~/.aws/credentials -profile skunk -entryname skunky -serialnumber arn:aws:iam::543215678910:mfa/jdoe -modeforce mfa_noassume -tokencode 852090`
 
-## Build/Run from Source
-
-```
-go get github.com/aws/aws-sdk-go/aws/session
-go get github.com/aws/aws-sdk-go/service/sts
-go get github.com/aws/aws-sdk-go/aws
-go get github.com/aws/aws-sdk-go/aws/ec2metadata
-go get github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds
-go get github.com/aws/aws-sdk-go/aws/credentials
-go get github.com/inconshreveable/log15
-go build -o ./build/gossamer -ldflags "-X main.version=v0.0.0"
-sudo mv ./build/gossamer /usr/bin/gossamer
-```
 
 ## Usage
 Here's the output of the contextual `--help` flag:
 ```
-[ec2-user@ip-10-17-143-217 gossamer]$ go run gossamer.go --help
-Usage of /tmp/go-build768499223/command-line-arguments/_obj/exe/gossamer:
+Usage of gossamer.exe:
   -a string
-    	Role ARN to assume.
+        Role ARN to assume.
   -daemon
-    	run as daemon checking every -s duration
+        run as daemon checking every -s duration
   -duration int
-    	Duration of token in seconds. (min=900, max=3600)  (default 3600)
+        Duration of token in seconds. (min=900, max=3600)  (default 3600)
   -entryname string
-    	when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]') (default "gossamer")
+        when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]') (default "gossamer")
   -force
-    	force refresh even if token not yet expired
+        force refresh even if token not yet expired
   -logfile string
-    	JSON logfile location (default "gossamer.log.json")
+        JSON logfile location (default "gossamer.log.json")
   -loglevel string
-    	Log level (info or debug) (default "info")
+        Log level (info or debug) (default "info")
+  -modeforce string
+        Force a specific mode (e.g., 'mfa_noassume')
   -o string
-    	Output credentials file. (default "./gossamer_creds")
+        Output credentials file. (default "./gossamer_creds")
   -profile string
-    	Cred file profile to use. This overrides the default of using instance role from metadata.
+        Cred file profile to use. This overrides the default of using instance role from metadata.
   -purgecreds
-    	Purge managed entries from credentials file and exit
+        Purge managed entries from credentials file and exit
   -region string
-    	Region mandatory in mfa and profile mode (default "us-east-1")
+        Region mandatory in mfa and profile mode (default "us-east-1")
   -rolesfile string
-    	File that contains json list of roles to assume and add to file.
+        File that contains json list of roles to assume and add to file.
   -s int
-    	Duration in seconds to wait between checks. (default 300)
+        Duration in seconds to wait between checks. (default 300)
   -serialnumber string
-    	Serial number of MFA device
+        Serial number of MFA device
   -t int
-    	 threshold in minutes. (default 10)
+         threshold in minutes. (default 10)
   -tokencode string
-    	Token code of mfa device.
-  -v	print version and exit
+        Token code of mfa device.
+  -v    print version and exit
 ```
 
 Test the command like so using the assumeRole that is allowed per your instance profile:
