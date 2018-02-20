@@ -1,4 +1,4 @@
-![Alt text](gossamer.jpg?raw=true "gossamer")
+![Alt text](img/gossamer.PNG?raw=true "gossamer")
 
 # gossamer
 CLI app to help you manage assuming roles across AWS accounts.
