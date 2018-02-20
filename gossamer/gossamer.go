@@ -28,8 +28,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 
-	"../acfmgr"
-	"../goslogger"
+	"github.com/rendicott/gossamer/acfmgr"
+	"github.com/rendicott/gossamer/goslogger"
 )
 
 // sample 2017-05-01 23:53:42 +0000 UTC
