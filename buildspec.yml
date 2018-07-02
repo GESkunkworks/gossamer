@@ -1,0 +1,34 @@
+version: 0.2
+env:
+  variables:
+    WORKDIR: "/go/src/github.com/rendicott/gossamer"
+phases:
+
+  install: 
+    commands:
+      - go get -u github.com/golang/lint/golint
+      - go get github.com/aws/aws-sdk-go
+      - go get github.com/inconshreveable/log15
+      - go get github.com/mattn/go-isatty
+
+  pre_build: 
+    commands:
+      # make sure code gets to the right path
+      - mkdir -p $WORKDIR
+      - cp -R ./* $WORKDIR
+      # Ensure code passes all lint tests
+      - golint -set_exit_status
+      - cd $WORKDIR
+      # Run all tests included with our application
+      - go test
+
+  build:
+    commands:
+      # get to right dir
+      - cd $WORKDIR
+      # Build our application
+      - go build -o gossamer.exe
+
+artifacts:
+  files:
+    - $WORKDIR/gossamer.exe 
