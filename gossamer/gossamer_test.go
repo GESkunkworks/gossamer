@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rendicott/gossamer/goslogger"
+	"github.com/GESkunkworks/gossamer/goslogger"
 )
 
 func writeBufferToFile(filename string, b *bytes.Buffer) error {
