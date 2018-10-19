@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rendicott/gossamer/goslogger"
-	"github.com/rendicott/gossamer/gossamer"
+	"github.com/GESkunkworks/gossamer/goslogger"
+	"github.com/GESkunkworks/gossamer/gossamer"
 )
 
 var version string
