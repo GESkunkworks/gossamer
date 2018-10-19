@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/rendicott/gossamer.svg?branch=master)](https://travis-ci.org/rendicott/gossamer)
+
 ![Alt text](img/gossamer.PNG?raw=true "gossamer")
 
 # gossamer
