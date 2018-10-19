@@ -38,23 +38,17 @@ configure:
 
 
 build-linux:
-	export GOOS=linux
-	export GOARCH=amd64
-	go build -o ./$(build_dir_linux)/gossamer -ldflags "-X main.version=$(version)"
+	env GOOS=linux GOARCH=amd64 go build -o ./$(build_dir_linux)/gossamer -ldflags "-X main.version=$(version)"
 	chmod +x ./$(build_dir_linux)/gossamer 
 	@cd ./$(build_dir_linux) && tar zcf ../$(build_dir)/$(packageNameNix) . 
 
 build-mac:
-	export GOOS=darwin
-	export GOARCH=amd64
-	go build -o ./$(build_dir_mac)/gossamer -ldflags "-X main.version=$(version)"
-	./$(build_dir_mac)/gossamer 
+	env GOOS=darwin GOARCH=amd64 go build -o ./$(build_dir_mac)/gossamer -ldflags "-X main.version=$(version)"
+	chmod +x ./$(build_dir_mac)/gossamer 
 	@cd ./$(build_dir_mac) && tar zcf ../$(build_dir)/$(packageNameMac) . 
 
 build-windows:
-	export GOOS=windows
-	export GOARCH=amd64
-	go build -o ./$(build_dir_windows)/gossamer.exe -ldflags "-X main.version=$(version)"
+	env GOOS=windows GOARCH=amd64 go build -o ./$(build_dir_windows)/gossamer.exe -ldflags "-X main.version=$(version)"
 	@cd ./$(build_dir_windows) && tar zcf ../$(build_dir)/$(packageNameWindows) . 
 
 clean:
