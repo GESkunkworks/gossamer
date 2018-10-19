@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/rendicott/gossamer.svg?branch=master)](https://travis-ci.org/rendicott/gossamer)
+[![Build Status](https://travis-ci.org/GESkunkworks/gossamer.svg?branch=master)](https://travis-ci.org/GESkunkworks/gossamer)
 
 ![Alt text](img/gossamer.PNG?raw=true "gossamer")
 
