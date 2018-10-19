@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/GESkunkworks/gossamer.svg?branch=master)](https://travis-ci.org/GESkunkworks/gossamer)
+[![Coverage Status](https://coveralls.io/repos/github/GESkunkworks/gossamer/badge.svg?branch=master)](https://coveralls.io/github/GESkunkworks/gossamer?branch=master)
 
 ![Alt text](img/gossamer.PNG?raw=true "gossamer")
 
