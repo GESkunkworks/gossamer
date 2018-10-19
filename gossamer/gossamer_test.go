@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rendicott/gossamer/goslogger"
+	"github.com/GESkunkworks/gossamer/goslogger"
 )
 
 func writeBufferToFile(filename string, b *bytes.Buffer) error {
@@ -146,7 +146,7 @@ func TestMFABadCreds(t *testing.T) {
 	ropts.Accounts = append(ropts.Accounts, acct)
 	ropts.Mode = ModeDecider(&ropts)
 	err = GenerateNewMfa(&ropts, ropts.Accounts)
-	expectedErr := "ExpiredToken: The security token included in the request is expired"
+	expectedErr := "InvalidClientTokenId: The security token included in the request is invalid"
 	if !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("Expected: '%s', Got: '%s'", expectedErr, err)
 	}

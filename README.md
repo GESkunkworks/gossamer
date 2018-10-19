@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.org/rendicott/gossamer.svg?branch=master)](https://travis-ci.org/rendicott/gossamer)
+[![Build Status](https://travis-ci.org/GESkunkworks/gossamer.svg?branch=master)](https://travis-ci.org/GESkunkworks/gossamer)
+[![Coverage Status](https://coveralls.io/repos/github/GESkunkworks/gossamer/badge.svg?branch=master)](https://coveralls.io/github/GESkunkworks/gossamer?branch=master)
 
 ![Alt text](img/gossamer.PNG?raw=true "gossamer")
 
@@ -10,31 +11,65 @@ Two primary use cases:
 * Can run as a service to continuously build aws credentials file with sts assume-role token based on the instance profile.
 ** For example you can use an instance profile role to assume-role in another AWS account.
 
+
 ## Installation
-Download a pre-built binary from the releases or you can build from source.
+On a mac you can do a Homebrew install.
 
-### Build/Run from Source
 
 ```
-go get github.com/rendicott/gossamer
-cd $GOPATH/src/github.com/rendicott/gossamer
-go build -o gossamer -ldflags "-X main.version=v0.0.0"
-sudo mv gossamer /usr/bin/gossamer
+brew tap GESkunkworks/gossamer https://github.com/GESkunkworks/geskunkworks-taps
+brew install gossamer
 ```
+
+For Windows and Linux you can grab one of the releases and unzip it to your desired location.
+
+### Quick Start
+Most people just want to assume-role and get CLI creds to a few accounts from a central account. This is a quick start method to do that:
+
+First add your user's permanent keys to the `~/.aws/credentials` file with the profile name `[giam]` like so:
+
+```
+[giam]
+output                = json
+region                = us-east-1
+aws_access_key_id     = AKILDOIAOFIFEFOEFSMA
+aws_secret_access_key = KBhehehehehehenotgonnaguessmenowZW
+```
+
+Next, find out what the ARN or serial number of the same user's MFA device is that is associated with the above perm creds.
+
+Make a directory to store the list of gossamer roles to assume and populated it with modified contents from the `rolesfile_sample.json` in this repo.
+
+```
+mkdir ~/gossamer
+wget https://github.build.ge.com/raw/CloudPod/gossamer/master/rolesfile_sample.json -O ~/gossamer/roles_all.json
+```
+
+Make sure to modify the `roles_all.json` file with the roles that you would like to assume from the starter credentials.
+
+Then set up your `~/.bashrc` or `~/.bash_profile` alias:
+
+```
+export MFA="arn:aws:iam::123456788987:mfa/212601587"
+alias gossa='gossamer -rolesfile ~/gossamer/roles_all.json -profile giam -serialnumber $MFA -o ~/.aws/credentials -force -tokencode'
+```
+
+Then source your profile file and run a test using the token code from your MFA device as the first argument to your alias.
+
+```
+source ~/.bashrc
+gossa 654321
+```
+
+You should see output that indicates the role assumptions were successful and your ~/.aws/credentials file will have new entries. 
+
 
 ## Modes
-There are three primary modes with `gossamer` that the program tries to auto-detect based on the given inputs. 
-
-* instance-profile only
-* assume-role with MFA
-* MFA only, no assume-role
-
-If it fails to detect the mode properly you can always specify the mode with the `-modeforce` flag. 
 
 ### profile-only
 Sample command:
 ```
-./gossamer -a arn:aws:iam::123456789101:role/collectd-cloudwatch-putter -entryname collectd-cloudwatch-putter -t 12 -o /tmp/creds
+gossamer -a arn:aws:iam::123456789101:role/collectd-cloudwatch-putter -entryname collectd-cloudwatch-putter -t 12 -o /tmp/creds
 ```
 Builds your `/tmp/creds` file to look like this based on your current EC2 instance profile
 ```
@@ -111,7 +146,7 @@ The mfa mode lets you assume multiple roles using a seed starter profile and inp
 
 Sample Command:
 ```
-./gossamer -o ~/.aws/credentials -rolesfile rolesfile_test.json -profile iam -serialnumber GADT99137836 -force -tokencode 123456
+gossamer -o ~/.aws/credentials -rolesfile rolesfile_test.json -profile iam -serialnumber GADT99137836 -force -tokencode 123456
 ```
 Where `iam` is the profile that will be loaded from `~/.aws/credentials` to then assume the roles listed in `rolesfile_test.json` using MFA token `123456` from device with serial number `GADT99137836`
 
@@ -161,48 +196,60 @@ Assumes you have IAM key/secret in your creds file under the name `skunk` and us
 
 Can only be activated via the `-modeforce mfa_noassume` flag whereas the other modes are auto-detected based on input. 
 Example:
-`./gossamer -o ~/.aws/credentials -profile skunk -entryname skunky -serialnumber arn:aws:iam::543215678910:mfa/jdoe -modeforce mfa_noassume -tokencode 852090`
+`gossamer -o ~/.aws/credentials -profile skunk -entryname skunky -serialnumber arn:aws:iam::543215678910:mfa/jdoe -modeforce mfa_noassume -tokencode 852090`
 
+## Build/Run from Source
+
+```
+go get github.com/aws/aws-sdk-go/aws/session
+go get github.com/aws/aws-sdk-go/service/sts
+go get github.com/aws/aws-sdk-go/aws
+go get github.com/aws/aws-sdk-go/aws/ec2metadata
+go get github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds
+go get github.com/aws/aws-sdk-go/aws/credentials
+go get github.com/inconshreveable/log15
+go build -o ./build/gossamer -ldflags "-X main.version=v0.0.0"
+sudo mv ./build/gossamer /usr/bin/gossamer
+```
 
 ## Usage
 Here's the output of the contextual `--help` flag:
 ```
-Usage of gossamer.exe:
+[ec2-user@ip-10-17-143-217 gossamer]$ go run gossamer.go --help
+Usage of /tmp/go-build768499223/command-line-arguments/_obj/exe/gossamer:
   -a string
-        Role ARN to assume.
+    	Role ARN to assume.
   -daemon
-        run as daemon checking every -s duration
+    	run as daemon checking every -s duration
   -duration int
-        Duration of token in seconds. (min=900, max=3600)  (default 3600)
+    	Duration of token in seconds. (min=900, max=3600)  (default 3600)
   -entryname string
-        when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]') (default "gossamer")
+    	when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]') (default "gossamer")
   -force
-        force refresh even if token not yet expired
+    	force refresh even if token not yet expired
   -logfile string
-        JSON logfile location (default "gossamer.log.json")
+    	JSON logfile location (default "gossamer.log.json")
   -loglevel string
-        Log level (info or debug) (default "info")
-  -modeforce string
-        Force a specific mode (e.g., 'mfa_noassume')
+    	Log level (info or debug) (default "info")
   -o string
-        Output credentials file. (default "./gossamer_creds")
+    	Output credentials file. (default "./gossamer_creds")
   -profile string
-        Cred file profile to use. This overrides the default of using instance role from metadata.
+    	Cred file profile to use. This overrides the default of using instance role from metadata.
   -purgecreds
-        Purge managed entries from credentials file and exit
+    	Purge managed entries from credentials file and exit
   -region string
-        Region mandatory in mfa and profile mode (default "us-east-1")
+    	Region mandatory in mfa and profile mode (default "us-east-1")
   -rolesfile string
-        File that contains json list of roles to assume and add to file.
+    	File that contains json list of roles to assume and add to file.
   -s int
-        Duration in seconds to wait between checks. (default 300)
+    	Duration in seconds to wait between checks. (default 300)
   -serialnumber string
-        Serial number of MFA device
+    	Serial number of MFA device
   -t int
-         threshold in minutes. (default 10)
+    	 threshold in minutes. (default 10)
   -tokencode string
-        Token code of mfa device.
-  -v    print version and exit
+    	Token code of mfa device.
+  -v	print version and exit
 ```
 
 Test the command like so using the assumeRole that is allowed per your instance profile:
