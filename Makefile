@@ -11,7 +11,10 @@ packageNameMacLatest := "gossamer-darwin-amd64-latest.tar.gz"
 packageNameWindows := "gossamer-windows-amd64-$(version).tar.gz"
 packageNameWindowsLatest := "gossamer-windows-amd64-latest.tar.gz"
 
-build: test build-linux build-mac build-windows
+build: configure test build-linux build-mac build-windows
+
+configure:
+	go get -t ./...
 
 test:
 	go test -v ./...
