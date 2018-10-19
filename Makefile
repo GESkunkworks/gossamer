@@ -8,7 +8,7 @@ packageNameNix := gossamer-linux-amd64-$(version).tar.gz
 packageNameMac := gossamer-darwin-amd64-$(version).tar.gz
 packageNameWindows := gossamer-windows-amd64-$(version).tar.gz
 
-build_dir := "output"
+build_dir := output
 
 build: deps test configure build-linux build-mac build-windows
 
