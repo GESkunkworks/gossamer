@@ -202,6 +202,16 @@ func GenerateNewProfile(opts *RunnerOptions, accounts []Account) (err error) {
 	return err
 }
 
+// Generate the role session name
+func generateRoleSessionName(client *sts.STS) (string) {
+	callerIdentity, err := client.GetCallerIdentity(&sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "gossamer"
+	}
+	arnParts := strings.Split(*callerIdentity.Arn, "/")
+	return "gossamer-" + arnParts[len(arnParts) - 1]
+}
+
 // GenerateNewMfa modifies an aws config file based on the desired
 // profile and provided mfa code. It uses assume-role and returns an error.
 func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
@@ -218,6 +228,9 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 		Config: aws.Config{Credentials: creds},
 	}))
 	svcProfile := sts.New(sessProfile)
+
+	// Update the role session name
+	opts.RoleSessionName = generateRoleSessionName(svcProfile)
 
 	gstInput := &sts.GetSessionTokenInput{
 		DurationSeconds: &opts.SessionDuration,
@@ -290,9 +303,10 @@ func GenerateNewMeta(opts *RunnerOptions, acctCurrent Account) (errr error) {
 	svcProfile := sts.New(sessProfile)
 
 	// the params we'll need for assume-role
+	roleSessionName := generateRoleSessionName(svcProfile)
 	params := &sts.AssumeRoleInput{
 		RoleArn:         &acctCurrent.RoleArn,
-		RoleSessionName: &opts.RoleSessionName,
+		RoleSessionName: &roleSessionName,
 		DurationSeconds: &opts.SessionDuration,
 	}
 	// now try the assume-role with the new metadata creds
