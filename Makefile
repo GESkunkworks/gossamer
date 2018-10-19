@@ -35,16 +35,22 @@ build-linux:
 	export GOOS="linux"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir) && tar zcfv ../$(packageNameNix) . && cd ..
+	cd ./$(build_dir)
+	tar zcfv ../$(packageNameNix) . && cd ..
+	ls -al
 
 build-mac:
 	export GOOS="darwin"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir) && tar zcfv ../$(packageNameMac) . && cd ..
+	cd ./$(build_dir)
+	tar zcfv ../$(packageNameMac) . && cd ..
+	ls -al
 
 build-windows:
 	export GOOS="windows"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer.exe -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir) && tar zcfv ../$(packageNameWindows) . && cd ..
+	cd ./$(build_dir)
+	tar zcfv ../$(packageNameWindows) . && cd ..
+	ls -al
