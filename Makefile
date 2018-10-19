@@ -21,8 +21,8 @@ deps:
 test:
 	go get golang.org/x/tools/cmd/cover
 	go get github.com/mattn/goveralls
-	go test -v -covermode=count -coverprofile=coverage.out $(HOME)/gopath/bin/goveralls \
-	   -service=travis-ci -repotoken $(COVERALLS_TOKEN) ./...
+	go test -v ./... -covermode=count -coverprofile=coverage.out $(GOPATH)/bin/goveralls \
+	   -service=travis-ci -repotoken $(COVERALLS_TOKEN) 
 
 configure:
 	mkdir $(build_dir)
