@@ -4,12 +4,9 @@
 #version := $(versionMaj).$(versionMin).$(versionPatch).$(TRAVIS_BUILD_NUMBER)
 version := $(TRAVIS_TAG).$(TRAVIS_BUILD_NUMBER)
 
-packageNameNix := "gossamer-linux-amd64-$(version).tar.gz"
-packageNameNixLatest := "gossamer-linux-amd64-latest.tar.gz"
-packageNameMac := "gossamer-darwin-amd64-$(version).tar.gz"
-packageNameMacLatest := "gossamer-darwin-amd64-latest.tar.gz"
-packageNameWindows := "gossamer-windows-amd64-$(version).tar.gz"
-packageNameWindowsLatest := "gossamer-windows-amd64-latest.tar.gz"
+packageNameNix := gossamer-linux-amd64-$(version).tar.gz
+packageNameMac := gossamer-darwin-amd64-$(version).tar.gz
+packageNameWindows := gossamer-windows-amd64-$(version).tar.gz
 
 build_dir := "output"
 
@@ -36,21 +33,24 @@ build-linux:
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
 	cd ./$(build_dir)
-	tar zcfv ../$(packageNameNix) . && cd ..
+	tar zcfv ../$(packageNameNix) .
 	ls -al
+	cd ..
 
 build-mac:
 	export GOOS="darwin"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
 	cd ./$(build_dir)
-	tar zcfv ../$(packageNameMac) . && cd ..
+	tar zcfv ../$(packageNameMac) .
 	ls -al
+	cd ..
 
 build-windows:
 	export GOOS="windows"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir)/gossamer.exe -ldflags "-X main.version=$(version)"
 	cd ./$(build_dir)
-	tar zcfv ../$(packageNameWindows) . && cd ..
+	tar zcfv ../$(packageNameWindows) .
 	ls -al
+	cd ..

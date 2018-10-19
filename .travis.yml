@@ -6,7 +6,7 @@ deploy:
   api_key:
     secure: a7h3tNrjHT6RXXoxnXjab1powTbvlRZd0LINMqz/gSId2xh3uqwAH/hGQr2CHf3DV1HlWOSiMoW7Kbwu3vH5sZZPCBvpbnp5F7vYdoecxJMZhzi7DfR72yjtYmVT2jPsjJ0xJmIXEVUqT8EEjOz/eqjfjVEBaveIW4Q3IopcHphITggx9o/Tp2RFeg/aWhMxu9Oo+izSP8AAut5ukjgKO+Ui3arzSNKmvE7W5OFcr3C8wzANMgK1CELaHY8/NcksWsjg6VAMytw070QW18Wb5fdS7WJlajLX2xBZ433U7w3NbR7eox+WFaLq53BYG5uD5Ra+uUAExOHig8TrAA1+dzfH6RlukxT3ELiipPsAU3SLKAlRQyqj8siHqYp9nZxyYwSaygk5M14EG9n+Yy+AdZP0C+vkE7jzEBo50wrOIK+1rX/UUJTvB4q27Exvg4Wznd/Fh3tyMi1YqxA8vJv9F2VYqRTfG4kTJVYSYQi/8DqKENDkzDT8WZTDHNngFi4L+hci9V8L6zX0bZOfs4XuipKjRHqTajJ6ZJAwnrAZtGsm2Za7z1RVWoi/bVcXiWt2l6WDaDC7LuzFOGNGVdI32eJ8b/jkVUEgjj1Z2H3FtPBgHY0Gl3Ucq3o8pq3vHKWeH4GPZOGC9T0kWJCV7AZIZkYmMZ28pMihfjY68ma/Eiw=
   file_glob: true
-  file: output/*
+  file: output/*.tar.gz
   skip_cleanup: true
   on:
     repo: GESkunkworks/gossamer
