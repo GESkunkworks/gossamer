@@ -31,26 +31,28 @@ configure:
 build-linux:
 	export GOOS="linux"
 	export GOARCH="amd64"
-	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir)
-	tar zcfv ../$(packageNameNix) .
-	ls -al
+	disbuild := $(build_dir)-linux
+	go build -o ./$(disbuild)/gossamer -ldflags "-X main.version=$(version)"
+	tar zcfv ./$(build_dir)/$(packageNameNix) ./$(disbuild)
+	ls -al ./$(build_dir)
 	cd ..
 
 build-mac:
 	export GOOS="darwin"
 	export GOARCH="amd64"
-	go build -o ./$(build_dir)/gossamer -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir)
-	tar zcfv ../$(packageNameMac) .
-	ls -al
+	disbuild := $(build_dir)-darwin
+	mkdir $(disbuild)
+	go build -o ./$(disbuild)/gossamer -ldflags "-X main.version=$(version)"
+	tar zcfv ./$(build_dir)/$(packageNameMac) ./$(disbuild)
+	ls -al ./$(build_dir)
 	cd ..
 
 build-windows:
 	export GOOS="windows"
 	export GOARCH="amd64"
-	go build -o ./$(build_dir)/gossamer.exe -ldflags "-X main.version=$(version)"
-	cd ./$(build_dir)
-	tar zcfv ../$(packageNameWindows) .
-	ls -al
+	disbuild := $(build_dir)-windows
+	mkdir $(disbuild)
+	go build -o ./$(disbuild)/gossamer.exe -ldflags "-X main.version=$(version)"
+	tar zcfv ./$(build_dir)/$(packageNameWindows) ./$(disbuild)
+	ls -al ./$(build_dir)
 	cd ..
