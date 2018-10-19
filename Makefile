@@ -11,7 +11,7 @@ packageNameMacLatest := "gossamer-darwin-amd64-latest.tar.gz"
 packageNameWindows := "gossamer-windows-amd64-$(version).tar.gz"
 packageNameWindowsLatest := "gossamer-windows-amd64-latest.tar.gz"
 
-build: deps test build-linux build-mac build-windows
+build: deps test configure build-linux build-mac build-windows
 
 deps:
 	go get -t ./...
@@ -19,22 +19,22 @@ deps:
 test:
 	go test -v ./...
 
-build-linux:
+configure:
 	mkdir build
+
+build-linux:
 	export GOOS="linux"
 	export GOARCH="amd64"
 	go build -o ./build/gossamer -ldflags "-X main.version=$(version)"
 	cd ./build && tar zcfv ../$(packageNameNix) . && cd ..
 
 build-mac:
-	mkdir build
 	export GOOS="darwin"
 	export GOARCH="amd64"
 	go build -o ./build/gossamer -ldflags "-X main.version=$(version)"
 	cd ./build && tar zcfv ../$(packageNameMac) . && cd ..
 
 build-windows:
-	mkdir build
 	export GOOS="windows"
 	export GOARCH="amd64"
 	go build -o ./build/gossamer.exe -ldflags "-X main.version=$(version)"
