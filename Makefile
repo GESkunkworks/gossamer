@@ -41,12 +41,14 @@ build-linux:
 	export GOOS="linux"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir_linux)/gossamer -ldflags "-X main.version=$(version)"
+	chmod +x ./$(build_dir_linux)/gossamer 
 	@cd ./$(build_dir_linux) && tar zcf ../$(build_dir)/$(packageNameNix) . 
 
 build-mac:
 	export GOOS="darwin"
 	export GOARCH="amd64"
 	go build -o ./$(build_dir_mac)/gossamer -ldflags "-X main.version=$(version)"
+	./$(build_dir_mac)/gossamer 
 	@cd ./$(build_dir_mac) && tar zcf ../$(build_dir)/$(packageNameMac) . 
 
 build-windows:
