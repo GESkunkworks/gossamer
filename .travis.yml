@@ -4,7 +4,7 @@ go:
 before_deploy:
   # set up stuff for fpm package builder, only runs on tag
   - sudo apt-get update -q
-  - sudo apt-get install ruby ruby-dev rubygems build-essential -y
+  - sudo apt-get install ruby ruby-dev build-essential -y
   - sudo gem install --no-ri --no-rdoc fpm
   - make package
 script:
