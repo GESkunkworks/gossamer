@@ -13,14 +13,19 @@ build_dir_linux := output-linux
 build_dir_mac := output-mac
 build_dir_windows := output-windows
 
-build: deps test configure build-linux build-mac build-windows
+# Can't use secrets in pull request builds
+pr: deps testlite configure build-linux build-mac build-windows
+
+nonpr: build
+
+build: deps testfull configure build-linux build-mac build-windows
 
 bareback: deps configure build-linux build-mac build-windows
 
 deps:
 	go get -t ./...
 
-test:
+testlite:
 	go get golang.org/x/tools/cmd/cover
 	go get github.com/mattn/goveralls
 	go get github.com/sozorogami/gover
@@ -28,6 +33,8 @@ test:
 	go test -v "github.com/GESkunkworks/gossamer/acfmgr" -covermode=count -coverprofile=acfmgr.coverprofile
 	go test -v "github.com/GESkunkworks/gossamer/gossamer" -covermode=count -coverprofile=gossamer.coverprofile
 	gover
+
+testfull: testlite
 	goveralls -coverprofile gover.coverprofile -service=travis-ci -repotoken $(COVERALLS_TOKEN) 
 
 configure:
