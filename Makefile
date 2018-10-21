@@ -22,6 +22,8 @@ build: deps testfull configure build-linux build-mac build-windows
 
 bareback: deps configure build-linux build-mac build-windows
 
+package: rpm deb
+
 deps:
 	go get -t ./...
 
@@ -55,6 +57,13 @@ build-mac:
 build-windows:
 	env GOOS=windows GOARCH=amd64 go build -o ./$(build_dir_windows)/gossamer.exe -ldflags "-X main.version=$(version)"
 	@cd ./$(build_dir_windows) && tar zcf ../$(build_dir)/$(packageNameWindows) . 
+
+# rpm and deb steps requires FPM to be installed
+rpm:
+	fpm -s dir -t rpm -n gossamer -v $(version) --prefix /usr/bin ./$(build_dir_linux)/gossamer
+
+deb:
+	fpm -s dir -t deb -n gossamer -v $(version) --deb-no-default-config-files --prefix /usr/bin ./$(build_dir_linux)/gossamer
 
 clean:
 	rm -f *.coverprofile
