@@ -191,6 +191,11 @@ aws_session_token = FbiglongtokenFbiglongtokenFbiglongtokenFbiglongtokenFbiglong
 
 ```
 
+You can also just assume a single role without needing a roles file. For example, in Windows the command would look something like:
+```
+gossamer -o %HOMEPATH%\.aws\credentials -a arn:aws:iam::8765448765487:role/sadmin -profile default -serialnumber arn:aws:iam::876548765487:mfa/rendicott -tokencode 123456
+```
+
 ### mfa without assume-role
 Assumes you have IAM key/secret in your creds file under the name `skunk` and uses it along with the MFA information to make the `skunky` entry in the same creds file. 
 
