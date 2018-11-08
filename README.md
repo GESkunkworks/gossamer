@@ -48,10 +48,15 @@ wget https://github.build.ge.com/raw/CloudPod/gossamer/master/rolesfile_sample.j
 Make sure to modify the `roles_all.json` file with the roles that you would like to assume from the starter credentials.
 
 Then set up your `~/.bashrc` or `~/.bash_profile` alias:
+```
+export MFA="arn:aws:iam::123456788987:mfa/212999999"
+alias gossa='gossamer -rolesfile ~/gossamer/roles_all.json -profile giam -serialnumber $MFA -o ~/.aws/credentials -force -tokencode'
+```
+
+Note: If using Cygwin for Windows machines, the paths for each alias copied from the generated aliases file into `~/.bashrc` will need to be replaced by the absolute paths to prevent errors indicating the system cannot find the path specified when running gossamer. Example below:
 
 ```
-export MFA="arn:aws:iam::123456788987:mfa/212601587"
-alias gossa='gossamer -rolesfile ~/gossamer/roles_all.json -profile giam -serialnumber $MFA -o ~/.aws/credentials -force -tokencode'
+alias goss-web='gossamer.exe -rolesfile "C:\cygwin64\home\212999999\roles\mc-m-web.json" -profile geadmin -serialnumber $MFA -o "C:\cygwin64\home\212999999\.aws\credentials" -force -tokencode'
 ```
 
 Then source your profile file and run a test using the token code from your MFA device as the first argument to your alias.
@@ -62,7 +67,6 @@ gossa 654321
 ```
 
 You should see output that indicates the role assumptions were successful and your ~/.aws/credentials file will have new entries. 
-
 
 ## Modes
 
