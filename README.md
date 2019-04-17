@@ -224,14 +224,12 @@ sudo mv ./build/gossamer /usr/bin/gossamer
 ## Usage
 Here's the output of the contextual `--help` flag:
 ```
-[ec2-user@ip-10-17-143-217 gossamer]$ go run gossamer.go --help
-Usage of /tmp/go-build768499223/command-line-arguments/_obj/exe/gossamer:
   -a string
     	Role ARN to assume.
   -daemon
     	run as daemon checking every -s duration
   -duration int
-    	Duration of token in seconds. (min=900, max=3600)  (default 3600)
+    	Duration of token in seconds. Duration longer than 3600 seconds only supported by AWS when assuming a single role per tokencode. When assuming multiple roles from rolesfile max duration will always be 3600 as restricted by AWS. (min=900, max=[read AWS docs])  (default 3600)
   -entryname string
     	when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]') (default "gossamer")
   -force
@@ -240,6 +238,8 @@ Usage of /tmp/go-build768499223/command-line-arguments/_obj/exe/gossamer:
     	JSON logfile location (default "gossamer.log.json")
   -loglevel string
     	Log level (info or debug) (default "info")
+  -modeforce string
+    	Force a specific mode (e.g., 'mfa_noassume')
   -o string
     	Output credentials file. (default "./gossamer_creds")
   -profile string
@@ -312,6 +312,35 @@ t=2017-05-17T22:30:03+0000 lvl=info msg="Token not yet expired. Exiting with no 
 Once that's build you can run a normal `aws` cli command like so and it will use the default credentials to perform the action in the other account.
 ```
 aws --profile gossamer --region us-east-1 cloudwatch put-metric-data --namespace collectd --value 80 --metric-name memory.percent.used --dimensions Host=blah2,PluginInstance=blah2
+```
+
+### SessionDuration
+Session Duration can be passed in as a parameter when assuming a single role per token code. When assuming multiple roles with a single token code AWS considers this to be "chaining" and limits the maximum session duration to 3600 seconds (1 hr). In order to generate sessions longer than 1hr you must do a single role at a time like this:
+
+```
+./gossamer -o ~/.aws/credentials -duration 42000 -entryname long-account-session -a arn:aws:iam::123456787902:role/p-engineering -profile giam -serialnumber $MFA -force -tokencode 189456
+t=2019-04-17T18:30:08-0400 lvl=info msg="gossamer: assume-role via instance role" version=
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed outfile=/Users/russellendicott/.aws/credentials
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed arn =arn:aws:iam::123456787902:role/p-engineering
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed duration=42000
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed threshold=10
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed between check duration=300
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed daemon mode=false
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed profile=giam
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed region=us-east-1
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed serialNumber=arn:aws:iam::125478935478:mfa/dude
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed tokenCode=189456
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed forceRefresh=true
+t=2019-04-17T18:30:08-0400 lvl=info msg=OPTIONS parsed modeForce=
+t=2019-04-17T18:30:08-0400 lvl=info msg=MODE determined mode=mfa
+t=2019-04-17T18:30:08-0400 lvl=warn msg="config mismatch, cannot run as daemon in 'mfa*' mode, unsetting daemonFlag"
+t=2019-04-17T18:30:08-0400 lvl=info msg="Scanning credentials file..."
+t=2019-04-17T18:30:08-0400 lvl=info msg="Detected expiration string" TokenExpires="2019-04-17 22:09:52 +0000 UTC"
+t=2019-04-17T18:30:08-0400 lvl=info msg="Token expiration check" ExpiresIn=-20.277 renewThreshold=10.000
+t=2019-04-17T18:30:09-0400 lvl=info msg="generating with token for single account" AccountName=long-account-session RoleArn=arn:aws:iam::123456787902:role/p-engineering
+t=2019-04-17T18:30:09-0400 lvl=info msg="Response from AssumeRole" AccessKeyId=ASIASOIEROJHN3821QK4D AccountName=long-account-session RoleArn=arn:aws:iam::123456787902:role/p-engineering Expiration="2019-04-18 10:10:04 +0000 UTC"
+t=2019-04-17T18:30:09-0400 lvl=info msg="Wrote new credentials file." path=/Users/dude/.aws/credentials
+t=2019-04-17T18:30:09-0400 lvl=info msg="GenerateNewMfa wrote credentials" numberOfCredentialsWritten=1
 ```
 
 ## Service

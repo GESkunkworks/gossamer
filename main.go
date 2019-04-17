@@ -34,7 +34,7 @@ func main() {
 	flag.StringVar(&loglevel, "loglevel", "info", "Log level (info or debug)")
 	flag.StringVar(&modeForce, "modeforce", "", "Force a specific mode (e.g., 'mfa_noassume')")
 	flag.StringVar(&profileEntryName, "entryname", "gossamer", "when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]')")
-	flag.Int64Var(&sessionDuration, "duration", 3600, "Duration of token in seconds. (min=900, max=[read AWS docs]) ")
+	flag.Int64Var(&sessionDuration, "duration", 3600, "Duration of token in seconds. Duration longer than 3600 seconds only supported by AWS when assuming a single role per tokencode. When assuming multiple roles from rolesfile max duration will always be 3600 as restricted by AWS. (min=900, max=[read AWS docs]) ")
 	flag.Int64Var(&renewThresholdInt64, "t", 10, " threshold in minutes.")
 	flag.Int64Var(&secondsInt64, "s", 300, "Duration in seconds to wait between checks.")
 	flag.BoolVar(&versionFlag, "v", false, "print version and exit")

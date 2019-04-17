@@ -111,14 +111,26 @@ func haveCredsWillWrite(creds *sts.Credentials, opts *RunnerOptions, instancePro
 	return err
 }
 
-func assumer(profile *sts.STS, opts *RunnerOptions, acct Account) error {
+func assumer(profile *sts.STS, opts *RunnerOptions, acct Account, useToken bool) error {
 
 	// the params we'll need for assume-role with mfa
-	params := &sts.AssumeRoleInput{
-		RoleArn:         &acct.RoleArn,
-		RoleSessionName: &opts.RoleSessionName,
-		DurationSeconds: &opts.SessionDuration,
+	var params *sts.AssumeRoleInput
+	if useToken {
+		params = &sts.AssumeRoleInput{
+			RoleArn:         &acct.RoleArn,
+			RoleSessionName: &opts.RoleSessionName,
+			DurationSeconds: &opts.SessionDuration,
+			SerialNumber:    &opts.SerialNumber,
+			TokenCode:       &opts.TokenCode,
+		}
+	} else {
+		params = &sts.AssumeRoleInput{
+			RoleArn:         &acct.RoleArn,
+			RoleSessionName: &opts.RoleSessionName,
+			DurationSeconds: &opts.SessionDuration,
+		}
 	}
+
 	// now try the assume-role with the loaded creds
 	resp, errr := profile.AssumeRole(params)
 	if errr != nil {
@@ -193,7 +205,7 @@ func GenerateNewProfile(opts *RunnerOptions, accounts []Account) (err error) {
 		goslogger.Loggo.Debug("working on account",
 			"AccountName", acct.AccountName,
 			"RoleArn", acct.RoleArn)
-		err = assumer(svcProfile, opts, acct)
+		err = assumer(svcProfile, opts, acct, false)
 		if err != nil {
 			return err
 		}
@@ -203,13 +215,13 @@ func GenerateNewProfile(opts *RunnerOptions, accounts []Account) (err error) {
 }
 
 // Generate the role session name
-func generateRoleSessionName(client *sts.STS) (string) {
+func generateRoleSessionName(client *sts.STS) string {
 	callerIdentity, err := client.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 	if err != nil {
 		return "gossamer"
 	}
 	arnParts := strings.Split(*callerIdentity.Arn, "/")
-	return "gossamer-" + arnParts[len(arnParts) - 1]
+	return "gossamer-" + arnParts[len(arnParts)-1]
 }
 
 // GenerateNewMfa modifies an aws config file based on the desired
@@ -232,43 +244,61 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 	// Update the role session name
 	opts.RoleSessionName = generateRoleSessionName(svcProfile)
 
-	gstInput := &sts.GetSessionTokenInput{
-		DurationSeconds: &opts.SessionDuration,
-		SerialNumber:    &opts.SerialNumber,
-		TokenCode:       &opts.TokenCode,
-	}
-
-	gstOutput, err := svcProfile.GetSessionToken(gstInput)
-	// goslogger.Loggo.Debug("Get session token result...", "gstOutput.Credentials", gstOutput.Credentials)
-	if err != nil {
-		goslogger.Loggo.Crit("Error in getSessionToken", "error", err)
-		return err
-	}
-	// build the credentials.cred object manually because the structs are diff.
-	statCreds := credentials.NewStaticCredentials(
-		*gstOutput.Credentials.AccessKeyId,
-		*gstOutput.Credentials.SecretAccessKey,
-		*gstOutput.Credentials.SessionToken)
-	sessMfa := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Credentials: statCreds},
-	}))
-	// now using the new session we can open another sts session
-	svcMfa := sts.New(sessMfa)
-
-	for _, acct := range accounts {
-		goslogger.Loggo.Info("working on account",
-			"AccountName", acct.AccountName,
-			"RoleArn", acct.RoleArn)
-		if opts.Mode == "mfa" {
-			err = assumer(svcMfa, opts, acct)
-		} else if opts.Mode == "mfa_noassume" {
-			err = haveCredsWillWrite(gstOutput.Credentials, opts, "NA", acct)
+	count := 0
+	if len(accounts) > 1 {
+		// means we have to get an sts session first then do the assumes
+		gstInput := &sts.GetSessionTokenInput{
+			DurationSeconds: &opts.SessionDuration,
+			SerialNumber:    &opts.SerialNumber,
+			TokenCode:       &opts.TokenCode,
 		}
+
+		gstOutput, err := svcProfile.GetSessionToken(gstInput)
+		// goslogger.Loggo.Debug("Get session token result...", "gstOutput.Credentials", gstOutput.Credentials)
 		if err != nil {
-			handleGenErr(err)
+			goslogger.Loggo.Crit("Error in getSessionToken", "error", err)
+			return err
+		}
+		// build the credentials.cred object manually because the structs are diff.
+		statCreds := credentials.NewStaticCredentials(
+			*gstOutput.Credentials.AccessKeyId,
+			*gstOutput.Credentials.SecretAccessKey,
+			*gstOutput.Credentials.SessionToken)
+		sessMfa := session.Must(session.NewSessionWithOptions(session.Options{
+			Config: aws.Config{Credentials: statCreds},
+		}))
+		// now using the new session we can open another sts session
+		svcMfa := sts.New(sessMfa)
+		for _, acct := range accounts {
+			goslogger.Loggo.Info("working on account",
+				"AccountName", acct.AccountName,
+				"RoleArn", acct.RoleArn)
+			if opts.Mode == "mfa" {
+				err = assumer(svcMfa, opts, acct, false)
+			} else if opts.Mode == "mfa_noassume" {
+				err = haveCredsWillWrite(gstOutput.Credentials, opts, "NA", acct)
+			}
+			if err != nil {
+				handleGenErr(err)
+			}
+		}
+	} else {
+		// means user only passed one so we can do the
+		// single shot assumption which supports longer
+		// sessionDuration
+		for _, acct := range accounts {
+			goslogger.Loggo.Info("generating with token for single account",
+				"AccountName", acct.AccountName,
+				"RoleArn", acct.RoleArn)
+			err = assumer(svcProfile, opts, acct, true)
+			if err != nil {
+				handleGenErr(err)
+			}
+			count++
 		}
 	}
-	goslogger.Loggo.Info("GenerateNewMfa wrote credentials", "numberOfCredentialsWritten", len(accounts))
+
+	goslogger.Loggo.Info("GenerateNewMfa wrote credentials", "numberOfCredentialsWritten", count)
 	return err
 }
 
