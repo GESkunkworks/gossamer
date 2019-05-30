@@ -197,7 +197,7 @@ func GenerateNewProfile(opts *RunnerOptions, accounts []Account) (err error) {
 	goslogger.Loggo.Debug("iamcreds", "creds", cval)
 
 	sessProfile := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Credentials: creds},
+		Config: aws.Config{Credentials: creds, Region: &opts.Region},
 	}))
 	svcProfile := sts.New(sessProfile)
 
@@ -237,7 +237,7 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 	goslogger.Loggo.Debug("iamcreds", "creds", cval)
 
 	sessProfile := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Credentials: creds},
+		Config: aws.Config{Credentials: creds, Region: &opts.Region},
 	}))
 	svcProfile := sts.New(sessProfile)
 
@@ -265,7 +265,7 @@ func GenerateNewMfa(opts *RunnerOptions, accounts []Account) (err error) {
 			*gstOutput.Credentials.SecretAccessKey,
 			*gstOutput.Credentials.SessionToken)
 		sessMfa := session.Must(session.NewSessionWithOptions(session.Options{
-			Config: aws.Config{Credentials: statCreds},
+			Config: aws.Config{Credentials: statCreds, Region: &opts.Region},
 		}))
 		// now using the new session we can open another sts session
 		svcMfa := sts.New(sessMfa)
@@ -327,7 +327,7 @@ func GenerateNewMeta(opts *RunnerOptions, acctCurrent Account) (errr error) {
 	creds := ec2rolecreds.NewCredentialsWithClient(meta)
 
 	sessProfile := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Credentials: creds},
+		Config: aws.Config{Credentials: creds, Region: &opts.Region},
 	}))
 	// create new session with current metadata creds
 	svcProfile := sts.New(sessProfile)
