@@ -20,7 +20,7 @@ nonpr: build
 
 build: deps testfull configure build-linux build-mac build-windows
 
-bareback: deps configure build-linux build-mac build-windows
+bare: deps configure build-linux build-mac build-windows
 
 deps:
 	go get -t ./...
