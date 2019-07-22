@@ -42,7 +42,7 @@ Make a directory to store the list of gossamer roles to assume and populated it 
 
 ```
 mkdir ~/gossamer
-wget https://github.build.ge.com/raw/CloudPod/gossamer/master/rolesfile_sample.json -O ~/gossamer/roles_all.json
+wget https://raw.githubusercontent.com/GESkunkworks/gossamer/master/rolesfile_sample.json -O ~/gossamer/roles_all.json
 ```
 
 Make sure to modify the `roles_all.json` file with the roles that you would like to assume from the starter credentials.
