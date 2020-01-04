@@ -30,7 +30,6 @@ testlite:
 	go get github.com/mattn/goveralls
 	go get github.com/sozorogami/gover
 	
-	go test -v "github.com/GESkunkworks/gossamer/acfmgr" -covermode=count -coverprofile=acfmgr.coverprofile
 	go test -v "github.com/GESkunkworks/gossamer/gossamer" -covermode=count -coverprofile=gossamer.coverprofile
 	gover
 

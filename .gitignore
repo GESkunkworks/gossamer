@@ -1,3 +1,6 @@
 .vscode/
 Jecrets
+*.swp
+*.log.json
+output*/
 
