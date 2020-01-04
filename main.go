@@ -23,21 +23,21 @@ var version string
 
 func main() {
     var gfl gossamer.GossFlags
-    flag.StringVar(&gfl.ConfigFile, "c", "", "path to config file that overrides all other parameters")
+    flag.StringVar(&gfl.ConfigFile, "c", "", "path to yml config file that overrides all other parameters")
     flag.StringVar(&gfl.RolesFile, "rolesfile", "", "LEGACY: File that contains json list of roles to assume and add to file.")
     flag.StringVar(&gfl.RoleArn, "a", "", "Role ARN to assume.")
     flag.StringVar(&gfl.OutFile, "o", "./gossamer_creds", "Output credentials file.")
     flag.StringVar(&gfl.LogFile, "logfile", "gossamer.log.json", "JSON logfile location")
     flag.StringVar(&gfl.LogLevel, "loglevel", "info", "Log level (info or debug)")
-    flag.StringVar(&gfl.Profile, "profile", "", "Cred file profile to use. This overrides the default of using instance role from metadata.")
+    flag.StringVar(&gfl.Profile, "profile", "", "Cred file profile to use. This overrides the default of using standard AWS session workflow (env var, instance-profile, etc)")
     flag.StringVar(&gfl.SerialNumber, "serialnumber", "", "Serial number of MFA device")
     flag.StringVar(&gfl.TokenCode, "tokencode", "", "Token code of mfa device.")
-    flag.StringVar(&gfl.Region, "region", "us-east-1", "Region mandatory in mfa and profile mode")
-    flag.StringVar(&gfl.ProfileEntryName, "entryname", "gossamer", "when used with single ARN this is the entry name that will be added to the creds file (e.g., '[test-env]')")
-    flag.StringVar(&gfl.GeneratedConfigOutputFile, "generate", "", "translates arguments into config file")
-    flag.Int64Var(&gfl.SessionDuration, "duration", 3600, "Duration of token in seconds. Duration longer than 3600 seconds only supported by AWS when assuming a single role per tokencode. When assuming multiple roles from rolesfile max duration will always be 3600 as restricted by AWS. (min=900, max=[read AWS docs]) ")
+    flag.StringVar(&gfl.Region, "region", "us-east-1", "desired region for the primary flow")
+    flag.StringVar(&gfl.ProfileEntryName, "entryname", "gossamer", "when used with single ARN this is the entry name that will be added to the creds file (e.g., 'test-env')")
+    flag.StringVar(&gfl.GeneratedConfigOutputFile, "generate", "", "translates command arguments into config file for those who wish to convert from legacy parameters to new config file format. Will also generate a sample config file when this parameter is passed the '@sample' value.")
+    // flag.Int64Var(&gfl.SessionDuration, "duration", 3600, "Duration of token in seconds. Duration longer than 3600 seconds only supported by AWS when assuming a single role per tokencode. When assuming multiple roles from rolesfile max duration will always be 3600 as restricted by AWS. (min=900, max=[read AWS docs]) ")
     flag.BoolVar(&gfl.VersionFlag, "v", false, "print version and exit")
-    flag.BoolVar(&gfl.ForceRefresh, "force", false, "LEGACY: used to force refresh even if token not yet expired but this field is ignored now")
+    flag.BoolVar(&gfl.ForceRefresh, "force", false, "LEGACY: ignored and only included so it doesn't break 1.x commands")
 	//TODO: Add positional args as source type for CParam
     flag.Parse()
     if gfl.VersionFlag {

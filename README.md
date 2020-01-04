@@ -212,6 +212,30 @@ flows:
 As many flows can be defined as desired by the user. For example, it may be useful to define multiple SAML flows for MFA enabled SAML providers and non MFA SAML providers as well as a few testing flows for permanent creds. 
 
 # Running With No Config File
+You can get some of the non-SAML functionality out of gossamer without ever having to make a config file. This is mostly here as legacy support for gossamer 1.x users' aliases but can be helpful for one off commands. 
+
+We'll go over a few here but see the full list of parameters at the bottom of the README or by running `gossamer -help`. 
+
+The following command will load roles to assume from a legacy "rolesfile" formatted JSON file and assume them using an MFA enabled session from the `giam` profile.
+```
+gossamer -o ./creds -rolesfile "./roles.json" -profile giam -serialnumber $MFA -tokencode 1234567
+```
+
+You can find a sample legacy rolesfile in the `./samples` directory but here's a quick reference:
+```json
+{
+    "Roles": [{
+        "RoleArn": "arn:aws:iam::123456789101:role/prod-role",
+        "AccountName": "prod-account",
+        "Region": "us-east-1"
+    }, {
+        "RoleArn": "arn:aws:iam::110987654321:role/dev-role",
+        "AccountName": "dev-account",
+        "Region": "us-west-1"
+    }]
+}
+```
+
 You can also just assume a single role without needing a config file. For example, in Windows the command would look something like:
 ```
 gossamer -o %HOMEPATH%\.aws\credentials -a arn:aws:iam::8765448765487:role/sadmin -profile default -serialnumber arn:aws:iam::876548765487:mfa/rendicott -tokencode 123456
@@ -219,6 +243,8 @@ gossamer -o %HOMEPATH%\.aws\credentials -a arn:aws:iam::8765448765487:role/sadmi
 
 # gossamer 1.x Users
 Users of previous versions of gossamer and probably not familiar with the concept of the config file and flows. The good news is that most of the 1.x command arguments are supported in 2.x except for the daemon mode functionality which has been removed. What this means is that most users can use their existing command aliases with the new version while they work on converting to the new config/flow flormat. 
+
+Running your "legacy" gossamer command and adding the `-generate my-config.yml` parameter will translate your command arguments to a gossamer 2.x config file. 
 
 ## Build/Run from Source
 
