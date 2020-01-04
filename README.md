@@ -257,4 +257,32 @@ sudo mv ./build/gossamer /usr/bin/gossamer
 ## Usage
 Here's the output of the contextual `--help` flag:
 ```
+Usage of gossamer:
+  -a string
+        Role ARN to assume.
+  -c string
+        path to yml config file that overrides all other parameters
+  -entryname string
+        when used with single ARN this is the entry name that will be added to the creds file (e.g., 'test-env') (default "gossamer")
+  -force
+        LEGACY: ignored and only included so it doesn't break 1.x commands
+  -generate string
+        translates command arguments into config file for those who wish to convert from legacy parameters to new config file format. Will also generate a sample config file when this parameter is passed the '@sample' value.
+  -logfile string
+        JSON logfile location (default "gossamer.log.json")
+  -loglevel string
+        Log level (info or debug) (default "info")
+  -o string
+        Output credentials file. (default "./gossamer_creds")
+  -profile string
+        Cred file profile to use. This overrides the default of using standard AWS session workflow (env var, instance-profile, etc)
+  -region string
+        desired region for the primary flow (default "us-east-1")
+  -rolesfile string
+        LEGACY: File that contains json list of roles to assume and add to file.
+  -serialnumber string
+        Serial number of MFA device
+  -tokencode string
+        Token code of mfa device.
+  -v    print version and exit
 ```
