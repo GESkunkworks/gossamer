@@ -4,7 +4,7 @@ import (
     "fmt"
 	"os"
     "flag"
-    "./gossamer"
+    "github.com/GESkunkworks/gossamer/gossamer"
     "github.com/GESkunkworks/gossamer/goslogger"
     "github.com/GESkunkworks/acfmgr"
 )
