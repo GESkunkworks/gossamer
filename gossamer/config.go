@@ -12,9 +12,7 @@ import (
 
 	"github.com/GESkunkworks/acfmgr"
 	"github.com/GESkunkworks/gossamer/goslogger"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -31,19 +29,21 @@ type Config struct {
 	OutFile string  `yaml:"output_file"`
 	Flows   []*Flow `yaml:"flows"`
 }
+
 // Flow describes an authentication flow and can
 // be one of many types. It contains the user's
 // desired auth flow behavior via keys or saml.
 type Flow struct {
-	Name       string       `yaml:"name"`
-	SAMLConfig *SAMLConfig  `yaml:"saml_config,omitempty"`
-    PermCredsConfig *PermCredsConfig `yaml:"permanent,omitempty"`
-	PAss       *Assumptions `yaml:"primary_assumptions,omitempty"`
-	SAss       *Assumptions `yaml:"secondary_assumptions,omitempty"`
-	Region     string       `yaml:"region,omitempty"`
-    AllowFailure bool       `yaml:"allow_failure"`
+	Name            string           `yaml:"name"`
+	SAMLConfig      *SAMLConfig      `yaml:"saml_config,omitempty"`
+	PermCredsConfig *PermCredsConfig `yaml:"permanent,omitempty"`
+	PAss            *Assumptions     `yaml:"primary_assumptions,omitempty"`
+	SAss            *Assumptions     `yaml:"secondary_assumptions,omitempty"`
+	DurationSeconds int64            `yaml:"session_duration_seconds,omitempty"`
+	Region          string           `yaml:"region,omitempty"`
+	AllowFailure    bool             `yaml:"allow_failure"`
 	credsType       string
-	roleSessionName      string
+	roleSessionName string
 	// Key type properties
 	DoNotPropagateRegion bool `yaml:"do_not_propagate_region"`
 }
@@ -51,13 +51,13 @@ type Flow struct {
 // PermCredsConfig holds information about how to obtain session
 // credentials from the local client
 type PermCredsConfig struct {
-    ProfileName          string     `yaml:"profile_name,omitempty"`
-	MFA                  *MFA       `yaml:"mfa,omitempty"`
+	ProfileName string `yaml:"profile_name,omitempty"`
+	MFA         *MFA   `yaml:"mfa,omitempty"`
 }
 
 func (pcc *PermCredsConfig) validate() (ok bool, err error) {
-    //TODO: Add validators
-    return ok, err
+	//TODO: Add validators
+	return ok, err
 }
 
 // SAMLConfig holds specific parameters for SAML configuration
@@ -70,8 +70,8 @@ type SAMLConfig struct {
 }
 
 func (sc *SAMLConfig) validate() (ok bool, err error) {
-    //TODO: Add some validation here
-    return ok, err
+	//TODO: Add some validation here
+	return ok, err
 }
 
 // CParam provides a way to identify sources for config parameters
@@ -153,11 +153,12 @@ type Assumptions struct {
 	roleSessionName      string
 	parentRegion         string
 	parentFlow           string
-    allowFailure         bool
+	allowFailure         bool
+	durationSeconds      int64
 }
 
-func (ap *Assumptions) setRoleSessionName(name string) {
-	ap.roleSessionName = name
+func (a *Assumptions) setRoleSessionName(name string) {
+	a.roleSessionName = name
 }
 
 func (a *Assumptions) getRoleSessionName() *string {
@@ -193,7 +194,7 @@ type Mapping struct {
 	NoOutput        bool   `yaml:"no_output,omitempty"`
 	SponsorCredsArn string `yaml:"sponsor_creds_arn,omitempty"`
 	credential      *sts.Credentials
-	//TODO: support Duration
+	DurationSeconds int64 `yaml:"session_duration_seconds,omitempty"`
 }
 
 func (m *Mapping) getCredential() (cred *sts.Credentials, err error) {
@@ -221,22 +222,12 @@ func (a *Assumptions) getMappingCredential(roleArn string) (cred *sts.Credential
 	return cred, err
 }
 
-// func (m *Mapping) setCredential(cred *sts.Credentials) (err error) {
-//     if cred == nil {
-//         msg := fmt.Sprintf("incoming credential is nil")
-//         err = errors.New(msg)
-//     }
-//     m.credential = cred
-//     return err
-//
-// }
-
 // validate checks for common things that always need to be done
 // to mappings before they can be written out
 func (m *Mapping) validate(strict bool) (err error) {
 	if len(m.ProfileName) < 1 {
 		goslogger.Loggo.Debug("detected missing profile name", "roleArn", m.RoleArn)
-		uid, err := getRoleUniqueId(m.RoleArn)
+		uid, err := getRoleUniqueID(m.RoleArn)
 		if err != nil {
 			return err
 		}
@@ -254,19 +245,30 @@ func (m *Mapping) setRegionIfNotSet(region string) {
 		m.Region = region
 	}
 }
+func (m *Mapping) setDurationIfNotSet(duration int64) {
+    var blankDuration int64
+	if m.DurationSeconds == blankDuration {
+		m.DurationSeconds = duration
+	}
+}
 
 // validateMappings checks all mappings within a set of
 // assumptions to make sure it has common things set
-func (a *Assumptions) validateMappings(strict bool) (err error) {
+func (a *Assumptions) validateMappings(strict, precheck bool) (err error) {
 	goslogger.Loggo.Debug("validating mappings in assumptions",
 		"numMappings", len(a.Mappings),
 		"parentFlow", a.parentFlow,
 	)
+    goslogger.Loggo.Debug("have assumptions duration", "duration", a.durationSeconds)
 	for i := range a.Mappings {
-		err = a.Mappings[i].validate(strict)
-		if err != nil {
-			return err
-		}
+        if precheck {
+            a.Mappings[i].setDurationIfNotSet(a.durationSeconds)
+        } else { // means we should already have credentials to validate
+            err = a.Mappings[i].validate(strict)
+            if err != nil {
+                return err
+            }
+        }
 	}
 	if !a.doNotPropagateRegion && len(a.parentRegion) > 0 {
 		goslogger.Loggo.Info("propagating region from flow to assumption mappings", "parentFlow", a.parentFlow)
@@ -289,8 +291,8 @@ func (m *Mapping) dump() string {
 	return fmt.Sprintf("RoleArn: %s\nProfileName: %s\ncredential: %s\n", m.RoleArn, m.ProfileName, *m.credential.AccessKeyId)
 }
 
-func (m *Assumptions) getMapping(roleArn string) (ok bool, mappingResult *Mapping) {
-	for _, mapping := range m.Mappings {
+func (a *Assumptions) getMapping(roleArn string) (ok bool, mappingResult *Mapping) {
+	for _, mapping := range a.Mappings {
 		if mapping.RoleArn == roleArn {
 			mappingResult = &mapping
 			ok = true
@@ -300,20 +302,20 @@ func (m *Assumptions) getMapping(roleArn string) (ok bool, mappingResult *Mappin
 	return ok, mappingResult
 }
 
-func (m *Assumptions) setMappingCredential(roleArn string, cred *sts.Credentials) (ok bool) {
-	for i := range m.Mappings {
-		if m.Mappings[i].RoleArn == roleArn {
-			m.Mappings[i].credential = cred
+func (a *Assumptions) setMappingCredential(roleArn string, cred *sts.Credentials) (ok bool) {
+	for i := range a.Mappings {
+		if a.Mappings[i].RoleArn == roleArn {
+			a.Mappings[i].credential = cred
 			return ok
 		}
 	}
 	return ok
 }
 
-func (m *Assumptions) setMappingProfileName(roleArn, name string) (ok bool) {
-	for i := range m.Mappings {
-		if m.Mappings[i].RoleArn == roleArn {
-			m.Mappings[i].ProfileName = name
+func (a *Assumptions) setMappingProfileName(roleArn, name string) (ok bool) {
+	for i := range a.Mappings {
+		if a.Mappings[i].RoleArn == roleArn {
+			a.Mappings[i].ProfileName = name
 			return ok
 		}
 	}
@@ -325,28 +327,33 @@ func (m *Assumptions) setMappingProfileName(roleArn, name string) (ok bool) {
 // the result of a SAML Assertion where a bunch of roles come in and we want to try and
 // map them to a profile name or region based on their ARN. This mapping is defined in the
 // config file so we do the conversion here.
-func (m *Assumptions) buildMappings(mappings []*Mapping) (err error) {
+func (a *Assumptions) buildMappings(mappings []*Mapping) (err error) {
 	for _, wmapping := range mappings {
-		ok, mapping := m.getMapping(wmapping.RoleArn)
+		ok, mapping := a.getMapping(wmapping.RoleArn)
 		if ok {
 			goslogger.Loggo.Debug("buildMappings: found mapping", "mapping", mapping.RoleArn)
 			// means we know about the role already and just need the creds
 			// and maybe the profile name if we don't have one.
 			if len(mapping.ProfileName) < 1 {
-				m.setMappingProfileName(mapping.RoleArn, wmapping.ProfileName)
+				a.setMappingProfileName(mapping.RoleArn, wmapping.ProfileName)
 			}
-			m.setMappingCredential(mapping.RoleArn, wmapping.credential)
+			if mapping.DurationSeconds == 0 {
+				// take session duration from assumptions
+				mapping.DurationSeconds = a.durationSeconds
+			}
+			a.setMappingCredential(mapping.RoleArn, wmapping.credential)
 		}
-		if !ok && m.AllRoles {
+		if !ok && a.AllRoles {
 			if !ok {
 				// means its totally new to us so we just take whatever we get
 				goslogger.Loggo.Debug("buildMappings: new mapping", "mapping", wmapping.RoleArn)
 				newMapping := Mapping{
-					RoleArn:     wmapping.RoleArn,
-					ProfileName: wmapping.ProfileName,
-					credential:  wmapping.credential,
+					RoleArn:         wmapping.RoleArn,
+					ProfileName:     wmapping.ProfileName,
+					DurationSeconds: a.durationSeconds,
+					credential:      wmapping.credential,
 				}
-				m.Mappings = append(m.Mappings, newMapping)
+				a.Mappings = append(a.Mappings, newMapping)
 			}
 		}
 	}
@@ -355,8 +362,8 @@ func (m *Assumptions) buildMappings(mappings []*Mapping) (err error) {
 
 // GetAcfmgrProfileInputs converts mappings into Acfmgr ProfileEntryInput for easy use with AcfMgr package
 func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput, err error) {
-	count_success := 0
-	count_fail := 0
+	countSuccess := 0
+	countFail := 0
 	total := len(pfis)
 	goslogger.Loggo.Debug("entering GetAcfmgrProfileInputs()...")
 	for _, mapping := range a.Mappings {
@@ -364,45 +371,45 @@ func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput
 			cred, err := mapping.getCredential()
 			if err != nil {
 				goslogger.Loggo.Error("error retrieiving credential", "error", err)
-				count_fail++
+				countFail++
 			} else {
 				profileInput := acfmgr.ProfileEntryInput{
 					Credential:       cred,
 					ProfileEntryName: mapping.ProfileName,
 					Region:           mapping.Region,
 					AssumeRoleARN:    mapping.RoleArn,
-                    Description:      a.parentFlow,
+					Description:      a.parentFlow,
 				}
 				pfis = append(pfis, &profileInput)
 				goslogger.Loggo.Debug("put credential in write queue",
-                    "RoleArn", mapping.RoleArn,
-                    "ProfileName", mapping.ProfileName,
-                    "cred", *profileInput.Credential.AccessKeyId,
-                )
-				count_success++
+					"RoleArn", mapping.RoleArn,
+					"ProfileName", mapping.ProfileName,
+					"cred", *profileInput.Credential.AccessKeyId,
+				)
+				countSuccess++
 			}
 		} else {
 			goslogger.Loggo.Info("Skipping writing cred per configuration directive", "roleArn", mapping.RoleArn)
 		}
 	}
-	if count_success < total {
-		goslogger.Loggo.Info("failed to obtain some credentials to add to write queue", "total", total, "count_fail", count_fail, "count_success", count_success)
+	if countSuccess < total {
+		goslogger.Loggo.Info("failed to obtain some credentials to add to write queue", "total", total, "countFail", countFail, "countSuccess", countSuccess)
 	}
-	if count_success == 0 {
-        if !a.allowFailure {
-            msg := fmt.Sprintf("failed to queue any desired credentials")
-            err = errors.New(msg)
-        }
+	if countSuccess == 0 {
+		if !a.allowFailure {
+			msg := fmt.Sprintf("failed to queue any desired credentials")
+			err = errors.New(msg)
+		}
 	}
 	return pfis, err
 }
 
 // getListOfArns gets a list of the role arns in the mappings and returns it
-func (m *Assumptions) getListOfArns() (roles []string) {
-    for _, mapping := range(m.Mappings) {
-        roles = append(roles, mapping.RoleArn)
-    }
-    return roles
+func (a *Assumptions) getListOfArns() (roles []string) {
+	for _, mapping := range a.Mappings {
+		roles = append(roles, mapping.RoleArn)
+	}
+	return roles
 }
 
 // MFA holds configuration information for the MFA device
@@ -436,21 +443,25 @@ func (a *Assumptions) setDoNotPropagateRegion(dnp bool) {
 // true if no problems are detected and false with an
 // error message if there are issues
 func (f *Flow) Validate() (valid bool, err error) {
-    // first detect type
-    switch {
-    case f.SAMLConfig != nil && f.PermCredsConfig == nil:
-        f.credsType = "saml"
-        valid, err = f.SAMLConfig.validate()
-        if err != nil {return valid, err}
-    case f.SAMLConfig == nil && f.PermCredsConfig != nil:
-        f.credsType = "permanent"
-        valid, err = f.PermCredsConfig.validate()
-        if err != nil {return valid, err}
-    default:
-        err = errors.New("only one type of creds can be used for starting each flow please choose one of: permanent or saml")
-        return valid, err
-    }
-    goslogger.Loggo.Info("detected type for flow", "flowName", f.Name, "type", f.credsType)
+	// first detect type
+	switch {
+	case f.SAMLConfig != nil && f.PermCredsConfig == nil:
+		f.credsType = "saml"
+		valid, err = f.SAMLConfig.validate()
+		if err != nil {
+			return valid, err
+		}
+	case f.SAMLConfig == nil && f.PermCredsConfig != nil:
+		f.credsType = "permanent"
+		valid, err = f.PermCredsConfig.validate()
+		if err != nil {
+			return valid, err
+		}
+	default:
+		err = errors.New("only one type of creds can be used for starting each flow please choose one of: permanent or saml")
+		return valid, err
+	}
+	goslogger.Loggo.Info("detected type for flow", "flowName", f.Name, "type", f.credsType)
 	if len(f.Region) > 1 {
 		goslogger.Loggo.Info("flow: detected user specified region so validating it")
 		var validRegion = regexp.MustCompile(`\w{2}-([a-z]*-){1,2}\d{1}`)
@@ -461,30 +472,37 @@ func (f *Flow) Validate() (valid bool, err error) {
 			return valid, err
 		}
 	}
+    // set a default session duration if none is specified
+    var blankDuration int64
+    if f.DurationSeconds == blankDuration { f.DurationSeconds = []int64{3600}[0] }
 	// set parentRegion and inheritance setting on assumptions if set on flow
 	if f.PAss != nil {
 		f.PAss.parentFlow = f.Name
+        goslogger.Loggo.Debug("setting primary assumption duration", "duration", f.DurationSeconds)
+        f.PAss.durationSeconds = f.DurationSeconds
 		if !f.DoNotPropagateRegion && len(f.Region) > 0 {
 			goslogger.Loggo.Info("setting parent region on primary assumptions", "flow", f.Name)
 			f.PAss.setParentRegion(f.Region)
 		} else {
 			f.PAss.setDoNotPropagateRegion(true)
 		}
-        if f.AllowFailure {
-            f.PAss.allowFailure = true
-        }
+		if f.AllowFailure {
+			f.PAss.allowFailure = true
+		}
 	}
 	if f.SAss != nil {
 		f.SAss.parentFlow = f.Name
+        goslogger.Loggo.Debug("setting secondary assumption duration", "duration", f.DurationSeconds)
+		f.SAss.durationSeconds = f.DurationSeconds
 		if !f.DoNotPropagateRegion && len(f.Region) > 0 {
 			goslogger.Loggo.Info("setting parent region on secondary assumptions", "flow", f.Name)
 			f.SAss.setParentRegion(f.Region)
 		} else {
 			f.SAss.setDoNotPropagateRegion(true)
 		}
-        if f.AllowFailure {
-            f.SAss.allowFailure = true
-        }
+		if f.AllowFailure {
+			f.SAss.allowFailure = true
+		}
 	}
 	return valid, err
 }
@@ -562,112 +580,21 @@ func getValueFromUser(label string) (value string, err error) {
 }
 
 // awsEnvSet returns true if any of the common AWS_* environment variables are set
-func awsEnvSet() (bool) {
-    commonVars := []string{
-        "AWS_ACCESS_KEY_ID",
-        "AWS_PROFILE",
-        "AWS_ROLE_SESSION_NAME",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
-    }
-    for _, cvar := range(commonVars) {
-        t := os.Getenv(cvar)
-        if t != "" {
-            return true
-        }
-    }
-    return false
-}
-
-// getPermSession looks at the flow's configuration settings and attempts to
-// work out how to return the credentials.
-func (f *Flow) getPermSession() (sess *session.Session, err error) {
-    goslogger.Loggo.Info("getting session from permanent credentials", "flowname", f.Name)
-    if f.PermCredsConfig != nil {
-        if len(f.PermCredsConfig.ProfileName) > 0 && len(f.Region) > 0 {
-            goslogger.Loggo.Debug("using profile for session with specific region", "flowname", f.Name)
-            if awsEnvSet() {
-                goslogger.Loggo.Info("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
-            }
-            sess = session.Must(session.NewSessionWithOptions(session.Options{
-                Config:  aws.Config{Region: &f.Region},
-                Profile: f.PermCredsConfig.ProfileName,
-            }))
-        } else if len(f.PermCredsConfig.ProfileName) > 0 {
-            goslogger.Loggo.Debug("using profile for session", "flowname", f.Name)
-            if awsEnvSet() {
-                goslogger.Loggo.Info("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
-            }
-            sess, err = session.NewSessionWithOptions(session.Options{
-                Profile: f.PermCredsConfig.ProfileName,
-            })
-            if err != nil { return sess, err }
-        } else {
-            // just try default session establish which should use 
-            // environment variables, instance profile, etc. in the
-            // AWS published order. (https://docs.aws.amazon.com/sdk-for-go/api/aws/session/#Session)
-            //
-            // * Environment Variables
-            // * Shared Credentials file
-            // * Shared Configuration file (if SharedConfig is enabled)
-            // * EC2 Instance Metadata (credentials only)
-            goslogger.Loggo.Info("no profile specified so attempting default cred loader from ENV vars, etc", "flowname", f.Name)
-            sess, err = session.NewSession()
-            if err != nil {
-                return sess, err
-            }
-        }
-    }
-    if sess == nil {
-        err = errors.New("unable to establish initial session")
-        return sess, err
-    }
-    // try to get the role session name from the session we just got
-    // because we want the pure name before the MFA session if any
-    f.PAss.setRoleSessionName(generateRoleSessionName(sess))
-    // now we need to check and see if we need to establish MFA on the session
-    goslogger.Loggo.Debug("checking for presence of MFA")
-    if f.PermCredsConfig.MFA != nil {
-        goslogger.Loggo.Debug("got raw serial and token", "serial", f.PermCredsConfig.MFA.Serial.Value, "token", f.PermCredsConfig.MFA.Token.Value)
-        serial, err := f.PermCredsConfig.MFA.Serial.gather()
-        if err != nil {return sess, err}
-        token, err := f.PermCredsConfig.MFA.Token.gather()
-        if err != nil {return sess, err}
-        goslogger.Loggo.Debug("got gathered serial and token", "serial", serial, "token", token)
-		gstInput := &sts.GetSessionTokenInput{
-			//TODO: add duration support
-            SerialNumber:    &serial,
-            TokenCode:       &token,
-        }
-		svcSTS := sts.New(sess)
-        gstOutput, err := svcSTS.GetSessionToken(gstInput)
-        if err != nil { return sess, err }
-        // build the credentials.cred object manually because the structs are diff.
-		statCreds := convertSCredsToCreds(gstOutput.Credentials)
-		if len(f.Region) > 0 {
-			sess = session.Must(session.NewSessionWithOptions(session.Options{
-				Config: aws.Config{Credentials: statCreds, Region: &f.Region},
-			}))
-		} else {
-			sess = session.Must(session.NewSessionWithOptions(session.Options{
-				Config: aws.Config{Credentials: statCreds,},
-			}))
+func awsEnvSet() bool {
+	commonVars := []string{
+		"AWS_ACCESS_KEY_ID",
+		"AWS_PROFILE",
+		"AWS_ROLE_SESSION_NAME",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+	}
+	for _, cvar := range commonVars {
+		t := os.Getenv(cvar)
+		if t != "" {
+			return true
 		}
-    }
-	return sess, err
-}
-
-// generateRoleSessionName runs a GetCallerIdentity API call
-// to try and auto generate the role session name from an
-// established session.
-func generateRoleSessionName(sess *session.Session) string {
-	client := sts.New(sess)
-    callerIdentity, err := client.GetCallerIdentity(&sts.GetCallerIdentityInput{})
-    if err != nil {
-        return "gossamer"
-    }
-    arnParts := strings.Split(*callerIdentity.Arn, "/")
-    return "gossamer-" + arnParts[len(arnParts)-1]
+	}
+	return false
 }
 
 // validate checks for valid properties and returns
@@ -689,35 +616,25 @@ func (k *KeySource) validate() (valid bool, err error) {
 	return valid, err
 }
 
-// assumeRoleWithSession takes an existing session and sets up the assume role inputs for
-// the API call
-func assumeRoleWithSession(roleArn, roleSessionName *string, sess *session.Session) (*sts.Credentials, error) {
-	client := sts.New(sess)
-	input := sts.AssumeRoleInput{
-		RoleArn:         roleArn,
-		RoleSessionName: roleSessionName,
-		//TODO: Add duration
-	}
-	aso, err := client.AssumeRole(&input)
-	return aso.Credentials, err
-}
-
+// GossFlags holds configuration passed into main via the flag package
+// and acts as a temporary structure to hold the variables until they
+// can be parsed into a proper Config object. Mostly in place to support
+// legacy flags from gossamer 1.x
 type GossFlags struct {
-    ConfigFile string
-    RolesFile string
-    OutFile string
-    RoleArn string
-    LogFile string
-    LogLevel string
-    GeneratedConfigOutputFile string
-    DaemonFlag bool
-    Profile string
-    SerialNumber string
-    TokenCode string
-    Region string
-    ProfileEntryName string
-    SessionDuration int64
-	VersionFlag bool
-    ForceRefresh bool
+	ConfigFile                string
+	RolesFile                 string
+	OutFile                   string
+	RoleArn                   string
+	LogFile                   string
+	LogLevel                  string
+	GeneratedConfigOutputFile string
+	DaemonFlag                bool
+	Profile                   string
+	SerialNumber              string
+	TokenCode                 string
+	Region                    string
+	ProfileEntryName          string
+	VersionFlag               bool
+	ForceRefresh              bool
+	SessionDuration           int64
 }
-

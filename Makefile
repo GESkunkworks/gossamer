@@ -61,3 +61,10 @@ clean:
 	rm -rf $(build_dir_linux)
 	rm -rf $(build_dir_mac)
 	rm -rf $(build_dir_windows)	
+
+format:
+	gofmt -w ./gossamer/*.go
+	gofmt -w ./*.go
+	golint
+	golint ./gossamer
+	go build -o t main.go

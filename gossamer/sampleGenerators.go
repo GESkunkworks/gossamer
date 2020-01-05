@@ -1,6 +1,6 @@
 package gossamer
 
-func newSamplePermMFA() (*PermCredsConfig) {
+func newSamplePermMFA() *PermCredsConfig {
 	pcc := PermCredsConfig{}
 	mfa := MFA{}
 	pcc.MFA = &mfa
@@ -18,7 +18,7 @@ func newSamplePermMFA() (*PermCredsConfig) {
 	return &pcc
 }
 
-func newSampleAssumptionsPrimary() (*Assumptions) {
+func newSampleAssumptionsPrimary() *Assumptions {
 	a := Assumptions{}
 	m1 := newSampleMappingPrimary()
 	m2 := newSampleMappingPrimary()
@@ -31,23 +31,24 @@ func newSampleAssumptionsPrimary() (*Assumptions) {
 	return &a
 }
 
-func newSampleAssumptionsSecondary() (*Assumptions) {
+func newSampleAssumptionsSecondary() *Assumptions {
 	a := Assumptions{}
 	m1 := newSampleMappingSecondary()
 	a.Mappings = append(a.Mappings, *m1)
 	return &a
 }
 
-func newSampleMappingPrimary() (*Mapping) {
+func newSampleMappingPrimary() *Mapping {
 	m := Mapping{}
 	m.RoleArn = "arn:aws:iam::123456789012:role/sub-admin"
 	m.ProfileName = "sub-admin"
 	m.Region = "us-west-2"
 	m.NoOutput = true
+	m.DurationSeconds = 43200
 	return &m
 }
 
-func newSampleMappingSecondary() (*Mapping) {
+func newSampleMappingSecondary() *Mapping {
 	m := Mapping{}
 	m.RoleArn = "arn:aws:iam::123456789012:role/admin"
 	m.ProfileName = "admin"
@@ -57,12 +58,12 @@ func newSampleMappingSecondary() (*Mapping) {
 	return &m
 }
 
-func newSampleSAMLConfig() (*SAMLConfig) {
+func newSampleSAMLConfig() *SAMLConfig {
 	sc := SAMLConfig{}
 	u := CParam{Source: "env", Value: "SAML_USER"}
 	p := CParam{Source: "prompt"}
 	url := CParam{Source: "config", Value: "https://my.saml.auth.url.com/auth.fcc"}
-	t := CParam{Source: "config", Value: "https://my.auth.target.com/fss/idp/startSSO.ping?PartnerSpId=urn:amazon:webservices" }
+	t := CParam{Source: "config", Value: "https://my.auth.target.com/fss/idp/startSSO.ping?PartnerSpId=urn:amazon:webservices"}
 	sc.Username = &u
 	sc.Password = &p
 	sc.URL = &url
@@ -70,31 +71,30 @@ func newSampleSAMLConfig() (*SAMLConfig) {
 	return &sc
 }
 
-// GenerateConfigSkeleton sets up a sample Config object and 
+// GenerateConfigSkeleton sets up a sample Config object and
 // with a bunch of sample values set and returns it
-func GenerateConfigSkeleton() (*Config) {
+func GenerateConfigSkeleton() *Config {
 	gc := Config{}
-    gc.OutFile = "./path/to/credentials/file"
-    flow1 := Flow{
-        Name: "sample-permanent-creds-mfa",
-        AllowFailure: true,
-        PermCredsConfig: newSamplePermMFA(),
-		PAss: newSampleAssumptionsPrimary(),
-    }
-    gc.Flows = append(gc.Flows, &flow1)
+	gc.OutFile = "./path/to/credentials/file"
+	flow1 := Flow{
+		Name:            "sample-permanent-creds-mfa",
+		AllowFailure:    true,
+		PermCredsConfig: newSamplePermMFA(),
+		PAss:            newSampleAssumptionsPrimary(),
+	}
+	gc.Flows = append(gc.Flows, &flow1)
 
 	flow2 := Flow{
-		Name: "sample-saml",
-		AllowFailure: false,
-		Region: "us-east-2",
-		SAMLConfig: newSampleSAMLConfig(),
-		PAss: newSampleAssumptionsPrimary(),
-		SAss: newSampleAssumptionsSecondary(),
+		Name:                 "sample-saml",
+		AllowFailure:         false,
+		Region:               "us-east-2",
+		SAMLConfig:           newSampleSAMLConfig(),
+		PAss:                 newSampleAssumptionsPrimary(),
+		SAss:                 newSampleAssumptionsSecondary(),
 		DoNotPropagateRegion: true,
 	}
 	flow2.PAss.AllRoles = true
-    gc.Flows = append(gc.Flows, &flow2)
+	flow2.DurationSeconds = 43200 // 12 hrs
+	gc.Flows = append(gc.Flows, &flow2)
 	return &gc
 }
-
-
