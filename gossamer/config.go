@@ -13,6 +13,7 @@ import (
 	"github.com/GESkunkworks/acfmgr"
 	"github.com/GESkunkworks/gossamer/goslogger"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -34,18 +35,36 @@ type Config struct {
 // be one of many types. It contains the user's
 // desired auth flow behavior via keys or saml.
 type Flow struct {
-	Name            string           `yaml:"name"`
-	SAMLConfig      *SAMLConfig      `yaml:"saml_config,omitempty"`
-	PermCredsConfig *PermCredsConfig `yaml:"permanent,omitempty"`
-	PAss            *Assumptions     `yaml:"primary_assumptions,omitempty"`
-	SAss            *Assumptions     `yaml:"secondary_assumptions,omitempty"`
-	DurationSeconds int64            `yaml:"session_duration_seconds,omitempty"`
-	Region          string           `yaml:"region,omitempty"`
-	AllowFailure    bool             `yaml:"allow_failure"`
-	credsType       string
-	roleSessionName string
-	// Key type properties
-	DoNotPropagateRegion bool `yaml:"do_not_propagate_region"`
+	Name                 string           `yaml:"name"`
+	SAMLConfig           *SAMLConfig      `yaml:"saml_config,omitempty"`
+	PermCredsConfig      *PermCredsConfig `yaml:"permanent,omitempty"`
+	PAss                 *Assumptions     `yaml:"primary_assumptions,omitempty"`
+	SAss                 *Assumptions     `yaml:"secondary_assumptions,omitempty"`
+	DurationSeconds      int64            `yaml:"session_duration_seconds,omitempty"`
+	Region               string           `yaml:"region,omitempty"`
+	DoNotPropagateRegion bool             `yaml:"do_not_propagate_region"`
+	AllowFailure         bool             `yaml:"allow_failure"`
+	credsType            string
+	roleSessionName      string
+	parentConfig         *Config
+	sharedSession        *session.Session
+}
+
+func (f *Flow) setRelationships(gc *Config) (err error) {
+	f.parentConfig = gc
+	if f.PAss != nil {
+		err = f.PAss.setRelationships(f, gc)
+		if err != nil {
+			return err
+		}
+	}
+	if f.SAss != nil {
+		err = f.SAss.setRelationships(f, gc)
+		if err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 // PermCredsConfig holds information about how to obtain session
@@ -126,9 +145,16 @@ func (c *CParam) gather() (val string, err error) {
 		switch c.name {
 		case "Password":
 			c.result, err = getSecretFromUser(c.name)
+			if err != nil {
+				return c.result, err
+			}
 		default:
 			c.result, err = getValueFromUser(c.name)
+			if err != nil {
+				return c.result, err
+			}
 		}
+		c.gathered = true
 		return c.result, err
 	}
 	// default to sending blank and an error if it got here
@@ -150,11 +176,25 @@ type Assumptions struct {
 	AllRoles             bool      `yaml:"all_roles"`
 	Mappings             []Mapping `yaml:"mappings"`
 	doNotPropagateRegion bool
+	atype                string
 	roleSessionName      string
 	parentRegion         string
-	parentFlow           string
 	allowFailure         bool
 	durationSeconds      int64
+	parentFlow           *Flow
+	parentConfig         *Config
+}
+
+func (a *Assumptions) setRelationships(f *Flow, gc *Config) (err error) {
+	a.parentFlow = f
+	a.parentConfig = gc
+	for i := range a.Mappings {
+		err = a.Mappings[i].setRelationships(a, f, gc)
+		if err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 func (a *Assumptions) setRoleSessionName(name string) {
@@ -178,33 +218,7 @@ func convertSCredsToCreds(screds *sts.Credentials) (creds *credentials.Credentia
 // NoSAss returns false if the flow has any secondary assumptions defined
 // and true if not.
 func (f *Flow) NoSAss() bool {
-	if f.SAss != nil {
-		return false
-	}
-	return true
-}
-
-// Mapping holds the configuration for role assumptions
-// and their desired profile name to be written to the
-// credentials file after they've been assumed.
-type Mapping struct {
-	RoleArn         string `yaml:"role_arn"`
-	ProfileName     string `yaml:"profile_name,omitempty"`
-	Region          string `yaml:"region,omitempty"`
-	NoOutput        bool   `yaml:"no_output,omitempty"`
-	SponsorCredsArn string `yaml:"sponsor_creds_arn,omitempty"`
-	credential      *sts.Credentials
-	DurationSeconds int64 `yaml:"session_duration_seconds,omitempty"`
-}
-
-func (m *Mapping) getCredential() (cred *sts.Credentials, err error) {
-	if m.credential == nil {
-		msg := fmt.Sprintf("credential is nil for %s", m.RoleArn)
-		err = errors.New(msg)
-	}
-	cred = m.credential
-	return cred, err
-
+	return f.SAss == nil
 }
 
 func (a *Assumptions) getMappingCredential(roleArn string) (cred *sts.Credentials, err error) {
@@ -222,75 +236,6 @@ func (a *Assumptions) getMappingCredential(roleArn string) (cred *sts.Credential
 	return cred, err
 }
 
-// validate checks for common things that always need to be done
-// to mappings before they can be written out
-func (m *Mapping) validate(strict bool) (err error) {
-	if len(m.ProfileName) < 1 {
-		goslogger.Loggo.Debug("detected missing profile name", "roleArn", m.RoleArn)
-		uid, err := getRoleUniqueID(m.RoleArn)
-		if err != nil {
-			return err
-		}
-		m.ProfileName = *uid
-		goslogger.Loggo.Debug("set profilename", "profileName", m.ProfileName)
-	}
-	if strict {
-		_, err = m.getCredential()
-	}
-	return err
-}
-
-func (m *Mapping) setRegionIfNotSet(region string) {
-	if len(m.Region) < 1 {
-		m.Region = region
-	}
-}
-func (m *Mapping) setDurationIfNotSet(duration int64) {
-    var blankDuration int64
-	if m.DurationSeconds == blankDuration {
-		m.DurationSeconds = duration
-	}
-}
-
-// validateMappings checks all mappings within a set of
-// assumptions to make sure it has common things set
-func (a *Assumptions) validateMappings(strict, precheck bool) (err error) {
-	goslogger.Loggo.Debug("validating mappings in assumptions",
-		"numMappings", len(a.Mappings),
-		"parentFlow", a.parentFlow,
-	)
-    goslogger.Loggo.Debug("have assumptions duration", "duration", a.durationSeconds)
-	for i := range a.Mappings {
-        if precheck {
-            a.Mappings[i].setDurationIfNotSet(a.durationSeconds)
-        } else { // means we should already have credentials to validate
-            err = a.Mappings[i].validate(strict)
-            if err != nil {
-                return err
-            }
-        }
-	}
-	if !a.doNotPropagateRegion && len(a.parentRegion) > 0 {
-		goslogger.Loggo.Info("propagating region from flow to assumption mappings", "parentFlow", a.parentFlow)
-		for i := range a.Mappings {
-			a.Mappings[i].setRegionIfNotSet(a.parentRegion)
-		}
-	} else {
-		goslogger.Loggo.Debug("not setting parentRegion on assumptions",
-			"parentFlow", a.parentFlow,
-			"a.doNotPropagateRegion", a.doNotPropagateRegion,
-			"len(parentRegion)", len(a.parentRegion),
-		)
-	}
-	return err
-}
-
-// dump spits back some basic info about the mapping
-// useful during debugging
-func (m *Mapping) dump() string {
-	return fmt.Sprintf("RoleArn: %s\nProfileName: %s\ncredential: %s\n", m.RoleArn, m.ProfileName, *m.credential.AccessKeyId)
-}
-
 func (a *Assumptions) getMapping(roleArn string) (ok bool, mappingResult *Mapping) {
 	for _, mapping := range a.Mappings {
 		if mapping.RoleArn == roleArn {
@@ -302,62 +247,14 @@ func (a *Assumptions) getMapping(roleArn string) (ok bool, mappingResult *Mappin
 	return ok, mappingResult
 }
 
-func (a *Assumptions) setMappingCredential(roleArn string, cred *sts.Credentials) (ok bool) {
+func (a *Assumptions) setMappingSAMLStuff(roleArn, principalArn string, sc *samlSessionConfig) {
 	for i := range a.Mappings {
 		if a.Mappings[i].RoleArn == roleArn {
-			a.Mappings[i].credential = cred
-			return ok
+			a.Mappings[i].samlPrincipalArn = principalArn
+			a.Mappings[i].parentSAMLConfig = sc
+			a.Mappings[i].userDefined = true
 		}
 	}
-	return ok
-}
-
-func (a *Assumptions) setMappingProfileName(roleArn, name string) (ok bool) {
-	for i := range a.Mappings {
-		if a.Mappings[i].RoleArn == roleArn {
-			a.Mappings[i].ProfileName = name
-			return ok
-		}
-	}
-	return ok
-}
-
-// buildMappings builds []*Mappings slice for the session when the mappings are not known
-// ahead of time and can't be parsed from the config file. This will generally come in as
-// the result of a SAML Assertion where a bunch of roles come in and we want to try and
-// map them to a profile name or region based on their ARN. This mapping is defined in the
-// config file so we do the conversion here.
-func (a *Assumptions) buildMappings(mappings []*Mapping) (err error) {
-	for _, wmapping := range mappings {
-		ok, mapping := a.getMapping(wmapping.RoleArn)
-		if ok {
-			goslogger.Loggo.Debug("buildMappings: found mapping", "mapping", mapping.RoleArn)
-			// means we know about the role already and just need the creds
-			// and maybe the profile name if we don't have one.
-			if len(mapping.ProfileName) < 1 {
-				a.setMappingProfileName(mapping.RoleArn, wmapping.ProfileName)
-			}
-			if mapping.DurationSeconds == 0 {
-				// take session duration from assumptions
-				mapping.DurationSeconds = a.durationSeconds
-			}
-			a.setMappingCredential(mapping.RoleArn, wmapping.credential)
-		}
-		if !ok && a.AllRoles {
-			if !ok {
-				// means its totally new to us so we just take whatever we get
-				goslogger.Loggo.Debug("buildMappings: new mapping", "mapping", wmapping.RoleArn)
-				newMapping := Mapping{
-					RoleArn:         wmapping.RoleArn,
-					ProfileName:     wmapping.ProfileName,
-					DurationSeconds: a.durationSeconds,
-					credential:      wmapping.credential,
-				}
-				a.Mappings = append(a.Mappings, newMapping)
-			}
-		}
-	}
-	return err
 }
 
 // GetAcfmgrProfileInputs converts mappings into Acfmgr ProfileEntryInput for easy use with AcfMgr package
@@ -378,7 +275,7 @@ func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput
 					ProfileEntryName: mapping.ProfileName,
 					Region:           mapping.Region,
 					AssumeRoleARN:    mapping.RoleArn,
-					Description:      a.parentFlow,
+					Description:      a.parentFlow.Name,
 				}
 				pfis = append(pfis, &profileInput)
 				goslogger.Loggo.Debug("put credential in write queue",
@@ -397,19 +294,11 @@ func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput
 	}
 	if countSuccess == 0 {
 		if !a.allowFailure {
-			msg := fmt.Sprintf("failed to queue any desired credentials")
+			msg := "failed to queue any desired credentials"
 			err = errors.New(msg)
 		}
 	}
 	return pfis, err
-}
-
-// getListOfArns gets a list of the role arns in the mappings and returns it
-func (a *Assumptions) getListOfArns() (roles []string) {
-	for _, mapping := range a.Mappings {
-		roles = append(roles, mapping.RoleArn)
-	}
-	return roles
 }
 
 // MFA holds configuration information for the MFA device
@@ -417,18 +306,6 @@ func (a *Assumptions) getListOfArns() (roles []string) {
 type MFA struct {
 	Serial *CParam `yaml:"serial"`
 	Token  *CParam `yaml:"token"`
-}
-
-// KeySource holds the configuration information for
-// where they key credentials are located. Options are
-// profile or default. "profile" will pull from the desired profile
-// in the credentials file. "default" will follow the
-// standard credentials search order as defined by AWS.
-// KeySource will be used during the flow's GetSession()
-// method to provide  a session.
-type KeySource struct {
-	SourceType  string `yaml:"source_type"`
-	ProfileName string `yaml:"profile_name"`
 }
 
 func (a *Assumptions) setParentRegion(region string) {
@@ -472,14 +349,16 @@ func (f *Flow) Validate() (valid bool, err error) {
 			return valid, err
 		}
 	}
-    // set a default session duration if none is specified
-    var blankDuration int64
-    if f.DurationSeconds == blankDuration { f.DurationSeconds = []int64{3600}[0] }
+	// set a default session duration if none is specified
+	var blankDuration int64
+	if f.DurationSeconds == blankDuration {
+		f.DurationSeconds = []int64{3600}[0]
+	}
 	// set parentRegion and inheritance setting on assumptions if set on flow
 	if f.PAss != nil {
-		f.PAss.parentFlow = f.Name
-        goslogger.Loggo.Debug("setting primary assumption duration", "duration", f.DurationSeconds)
-        f.PAss.durationSeconds = f.DurationSeconds
+		f.PAss.atype = "primary"
+		goslogger.Loggo.Debug("setting primary assumption duration", "duration", f.DurationSeconds)
+		f.PAss.durationSeconds = f.DurationSeconds
 		if !f.DoNotPropagateRegion && len(f.Region) > 0 {
 			goslogger.Loggo.Info("setting parent region on primary assumptions", "flow", f.Name)
 			f.PAss.setParentRegion(f.Region)
@@ -491,8 +370,8 @@ func (f *Flow) Validate() (valid bool, err error) {
 		}
 	}
 	if f.SAss != nil {
-		f.SAss.parentFlow = f.Name
-        goslogger.Loggo.Debug("setting secondary assumption duration", "duration", f.DurationSeconds)
+		f.SAss.atype = "secondary"
+		goslogger.Loggo.Debug("setting secondary assumption duration", "duration", f.DurationSeconds)
 		f.SAss.durationSeconds = f.DurationSeconds
 		if !f.DoNotPropagateRegion && len(f.Region) > 0 {
 			goslogger.Loggo.Info("setting parent region on secondary assumptions", "flow", f.Name)
@@ -515,6 +394,9 @@ func (gc *Config) ParseConfigFile(filename string) (err error) {
 		return err
 	}
 	err = yaml.Unmarshal(yamlFile, gc)
+	if err != nil {
+		return err
+	}
 	// add labels to CParams so we can sanely prompt for them
 	for _, flow := range gc.Flows {
 		if flow.SAMLConfig != nil {
@@ -540,6 +422,7 @@ func (gc *Config) ParseConfigFile(filename string) (err error) {
 			}
 		}
 	}
+	err = gc.setRelationships()
 	return err
 }
 
@@ -597,25 +480,6 @@ func awsEnvSet() bool {
 	return false
 }
 
-// validate checks for valid properties and returns
-// true if no problems are detected and false with an
-// error message if there are issues
-func (k *KeySource) validate() (valid bool, err error) {
-	if k.SourceType == "default" || k.SourceType == "profile" {
-		valid = true
-	} else {
-		err = errors.New("key source source type must be of one 'profile' or 'default'")
-		return valid, err
-	}
-	if k.SourceType == "profile" {
-		if len(k.ProfileName) < 1 {
-			err = errors.New("when using key source type 'profile' must specify profile_name")
-			return valid, err
-		}
-	}
-	return valid, err
-}
-
 // GossFlags holds configuration passed into main via the flag package
 // and acts as a temporary structure to hold the variables until they
 // can be parsed into a proper Config object. Mostly in place to support
@@ -637,4 +501,14 @@ type GossFlags struct {
 	VersionFlag               bool
 	ForceRefresh              bool
 	SessionDuration           int64
+}
+
+func (gc *Config) setRelationships() (err error) {
+	for i := range gc.Flows {
+		err = gc.Flows[i].setRelationships(gc)
+		if err != nil {
+			return err
+		}
+	}
+	return err
 }

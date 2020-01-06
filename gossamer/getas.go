@@ -2,54 +2,39 @@ package gossamer
 
 import (
 	"errors"
-	"fmt"
 	"github.com/GESkunkworks/gossamer/goslogger"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sts"
 )
 
 // GetPAss handles the primary assumptions when using traditional keys
-func (f *Flow) GetPAss() (err error) {
-	sess, err := f.getPermSession()
-	if err != nil {
-		return err
-	}
-    // run a precheck on the mappings to make sure stuff is set like duration
-    strict := false
-    precheck := true
-    err = f.PAss.validateMappings(strict, precheck)
-    if err != nil { return err }
-	for _, mapping := range f.PAss.Mappings {
-		cred, err := assumeRoleWithSession(
-			&mapping.RoleArn,
-			f.PAss.getRoleSessionName(),
-			&mapping.DurationSeconds,
-			sess,
-		)
+func (f *Flow) GetPAss() error {
+	var masterErr error
+	var err error
+	goslogger.Loggo.Info("starting Primary assumptions", "flowName", f.Name)
+	for i := range f.PAss.Mappings {
+		err = f.PAss.Mappings[i].assume()
 		if err != nil {
 			goslogger.Loggo.Error("Error assuming primary mapping",
-				"PrimaryMapping", mapping.RoleArn,
+				"PrimaryMapping", f.PAss.Mappings[i].RoleArn,
 				"flowType", f.credsType,
 				"Error", err,
 			)
 		} else {
-			f.PAss.setMappingCredential(mapping.RoleArn, cred)
 			goslogger.Loggo.Info("Successfully assumed Primary Mapping",
-				"mapping", mapping.RoleArn,
+				"mapping", f.PAss.Mappings[i].RoleArn,
 				"flowType", f.credsType,
-				"cred", *cred.AccessKeyId,
 			)
 		}
 	}
-	strict = false
-    precheck = false
-	err = f.PAss.validateMappings(strict, precheck)
-	return err
+	if !f.AllowFailure {
+		masterErr = err
+	}
+	return masterErr
 }
 
 // GetPAssSAML handles the SAML assumptions using the current desird configuration from the flow
-func (f *Flow) GetPAssSAML() (err error) {
+func (f *Flow) GetPAssSAML() error {
+	var masterErr error
+	var err error
 	samluser, err := f.SAMLConfig.Username.gather()
 	if err != nil {
 		return err
@@ -73,31 +58,17 @@ func (f *Flow) GetPAssSAML() (err error) {
 		return err
 	}
 
-    strict := false
-    precheck := true
-    goslogger.Loggo.Debug("running PAss validateMappings before SAML assumption")
-	err = f.PAss.validateMappings(strict, precheck)
-	rolesResult, err := sc.assumeSAMLRoles(f.PAss)
+	err = sc.assumeSAMLRoles(f.PAss)
 	if err != nil {
 		return err
 	}
 	goslogger.Loggo.Debug("flow > saml > AssumeSAMLRoles: done")
 	// set the session name for later in case we need it for secondary assumptions
 	f.roleSessionName = *sc.roleSessionName
-
-	err = f.PAss.buildMappings(rolesResult)
-	if err != nil {
-		return err
+	if !f.AllowFailure {
+		masterErr = err
 	}
-
-	strict = false
-    precheck = false
-	err = f.PAss.validateMappings(strict, precheck)
-	if err != nil {
-		return err
-	}
-	goslogger.Loggo.Debug("flow > saml > BuildMappings: done")
-	return err
+	return masterErr
 }
 
 // ExecutePrimary runs the appropriate steps to complete the Primary Assumptions
@@ -122,79 +93,33 @@ func (f *Flow) ExecutePrimary() (err error) {
 
 // GetSAss goes through all of the secondary assumptions (if any) and collects credentials
 // it's very lenient and only returns errors if they are critical.
-func (f *Flow) GetSAss() (masterErr error) {
-	goslogger.Loggo.Debug("starting flow > GetSAss", "name", f.Name)
+func (f *Flow) GetSAss() error {
+	var masterErr error
+	var err error
+	goslogger.Loggo.Info("starting Primary assumptions", "flowName", f.Name)
 	if !f.NoSAss() {
 		// first we need to make absolutely sure we carry over the RoleSessionName for security purposes.
 		rsn := f.PAss.getRoleSessionName()
 		f.SAss.setRoleSessionName(*rsn)
-        // run a precheck on the mappings to make sure stuff is set like duration
-		strict := false
-        precheck := true
-        err := f.SAss.validateMappings(strict, precheck)
-        if err != nil { return err }
-		for _, sapping := range f.SAss.Mappings {
-			var sponsorCred *sts.Credentials
-			var err error
-			if len(sapping.SponsorCredsArn) < 1 && len(f.PAss.Mappings) > 1 {
-				// means we can't make any inferences
-				msg := fmt.Sprintf("no sponsor_creds_arn specified for secondary mapping '%s' and too many primary mappings to make an inference", sapping.RoleArn)
-				err = errors.New(msg)
-			} else if len(sapping.SponsorCredsArn) < 1 {
-				goslogger.Loggo.Debug("detected missing sponsor creds arn in secondary mapping")
-				// means user didn't put anything in config file for sponsor creds
-				// however, if there's only one set of primary creds we can infer
-				if len(f.PAss.Mappings) == 1 {
-					goslogger.Loggo.Debug("since only one set of creds in primary assumptions we'll take sponsorcreds from there")
-					sponsorCred, err = f.PAss.getMappingCredential(f.PAss.Mappings[0].RoleArn)
-				}
-			} else {
-				sponsorCred, err = f.PAss.getMappingCredential(sapping.SponsorCredsArn)
-			}
+		// run a precheck on the mappings to make sure stuff is set like duration
+		for i := range f.SAss.Mappings {
+			err = f.SAss.Mappings[i].assume()
 			if err != nil {
-				goslogger.Loggo.Error(
-					"Error with getting sponsor credentials, skipping SecondaryMapping",
-					"SponsorCredsArn", sapping.SponsorCredsArn,
-					"SecondaryMapping", sapping.RoleArn,
-					"error", err,
+				goslogger.Loggo.Error("Error assuming secondary mapping",
+					"SecondaryMapping", f.SAss.Mappings[i].RoleArn,
+					"Error", err,
 				)
 			} else {
-				sess, err := session.NewSessionWithOptions(session.Options{
-					Config: aws.Config{Credentials: convertSCredsToCreds(sponsorCred)},
-				})
-				if err != nil {
-					goslogger.Loggo.Error("Error establishing session with sponsorCreds",
-						"Error", err,
-					)
-				} else {
-					cred, err := assumeRoleWithSession(
-						&sapping.RoleArn,
-						f.SAss.getRoleSessionName(),
-						&sapping.DurationSeconds,
-						sess,
-					)
-					if err != nil {
-						goslogger.Loggo.Error("Error assuming secondary mapping",
-							"SecondaryMapping", sapping.RoleArn,
-							"Error", err,
-						)
-					} else {
-						f.SAss.setMappingCredential(sapping.RoleArn, cred)
-						goslogger.Loggo.Info("Successfully assumed Secondary Mapping",
-							"mapping", sapping.RoleArn,
-							"SponsorCredsArn", sapping.SponsorCredsArn,
-							"cred", *cred.AccessKeyId,
-						)
-					}
-				}
+				goslogger.Loggo.Info("Successfully assumed Secondary Mapping",
+					"mapping", f.SAss.Mappings[i].RoleArn,
+				)
 			}
 		}
-		// now validate everything but we'll be lenient with creds
-		strict = false
-        precheck = false
-		masterErr = f.SAss.validateMappings(strict, precheck)
 	} else {
 		goslogger.Loggo.Info("no secondary assumptions detected so skipping", "flowname", f.Name)
+	}
+	if !f.AllowFailure {
+		masterErr = err
 	}
 	return masterErr
 }

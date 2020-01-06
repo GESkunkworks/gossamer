@@ -3,11 +3,9 @@ package gossamer
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
-    "strconv"
 	"github.com/GESkunkworks/gossamer/goslogger"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
@@ -18,6 +16,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -106,29 +105,29 @@ type samlSessionConfig struct {
 	samlTarget      *string
 	roleSessionName *string
 	sessionDuration *string
+	stsClient       *sts.STS
 }
 
 func (sc *samlSessionConfig) getSessionDuration() (duration int64) {
-    duration, err := strconv.ParseInt(*sc.sessionDuration, 10, 64)
-    if err != nil { duration = 0 }
-    return duration
+	duration = 0
+	if sc.sessionDuration != nil {
+		var err error
+		duration, err = strconv.ParseInt(*sc.sessionDuration, 10, 64)
+		if err != nil {
+			duration = 0
+		}
+	} else {
+		goslogger.Loggo.Debug("SAML Assertion did not provide session duration, using default")
+	}
+	return duration
 }
 
 type samlRole struct {
-	accountNumber string `json:"AccountNumber"`
+	accountNumber string
 	roleName      string
 	roleArn       string
 	principalArn  string
-	result        *sts.AssumeRoleWithSAMLOutput
 	identifier    string
-}
-
-// dump returns a formatted string of the current samlSessionConfig struct
-// which is useful for displaying configuration to the user and debugging.
-func (sc *samlSessionConfig) dump() string {
-	tempo := []byte{}
-	tempo, _ = json.Marshal(sc)
-	return string(tempo)
 }
 
 // newSAMLSessionConfig returns a samlSessionConfig struct whose methods can be
@@ -197,7 +196,7 @@ func newRoleFromAttributeValue(raw string) (*samlRole, error) {
 	var err error
 	parn := strings.Split(raw, ",")
 	if len(parn) != 2 {
-		err = errors.New("Error parsing PrincipalArn from saml:AttributeValue during comma split")
+		err = errors.New("error parsing PrincipalArn from saml:AttributeValue during comma split")
 		return &role, err
 	}
 	role.principalArn = parn[1]
@@ -265,7 +264,6 @@ func (sc *samlSessionConfig) getAssertion() (err error) {
 				done = true
 				return err
 			}
-			break
 		case string(tn) == "input":
 			for {
 				k, v, more := z.TagAttr()
@@ -287,79 +285,46 @@ func (sc *samlSessionConfig) getAssertion() (err error) {
 // or simply assume a preset list of mappings passed in with preAssumptions
 // it returns a slice of gossamer.Mapping structs which can hold more metadata than the
 // SAMLRoles that have been built thus far
-func (sc *samlSessionConfig) assumeSAMLRoles(preAssumptions *Assumptions) (mappings []*Mapping, err error) {
-	client := sts.New(session.New())
+func (sc *samlSessionConfig) assumeSAMLRoles(preAssumptions *Assumptions) (err error) {
+	sc.stsClient = sts.New(session.Must(session.NewSession()))
 	countSuccess := 0
 	countFail := 0
-    samlSessionDuration := sc.getSessionDuration()
-    goslogger.Loggo.Info("got session duration from SAML response", "samlSessionDuration", samlSessionDuration)
+	// add mappings from saml assertion we don't know about already
 	for _, role := range sc.roles {
-		var m Mapping
-        found, ma := preAssumptions.getMapping(role.roleArn)
-        var duration int64
-        var blankDuration int64
+		var found bool
+		found, _ = preAssumptions.getMapping(role.roleArn)
 		if !preAssumptions.AllRoles && !found {
 			goslogger.Loggo.Debug("Skipping role assumption per configuration directives", "role.roleArn", role.roleArn)
 			continue
-        }
-        if found {
-			goslogger.Loggo.Debug("Using mapping duration", "duration", ma.DurationSeconds)
-            duration = ma.DurationSeconds
-        } else if samlSessionDuration == 0 {
-            goslogger.Loggo.Debug("setting duration to parent assumptions duration since we have no mapping duration to grab and saml session duration is blank")
-            duration = preAssumptions.durationSeconds
-        } else {
-            duration = samlSessionDuration
-        }
-
-        // make absolutely sure we don't have blank duration after all that
-        if duration == blankDuration {
-            duration = 3600
-        }
-		input := sts.AssumeRoleWithSAMLInput{
-			PrincipalArn:  &role.principalArn,
-			RoleArn:       &role.roleArn,
-			SAMLAssertion: sc.assertion,
-            DurationSeconds: &duration,
-		}
-		result, err := client.AssumeRoleWithSAML(&input)
-		if err == nil && duration > 3600 {
-			goslogger.Loggo.Info("Successfully assumed session extended SAML session duration", "duration", duration)
-		}
-		if err != nil && strings.Contains(err.Error(), "DurationSeconds exceeds the MaxSessionDuration") {
-			// warn and bump the duration down to default
-			goslogger.Loggo.Debug(
-				"WARNING: The requested DurationSeconds exceeds the MaxSessionDuration set for this role. Removing duration parameter.",
+		} else if !found {
+			var m *Mapping
+			goslogger.Loggo.Debug("no user defined mapping found, creating new saml mapping", "roleArn", role.roleArn)
+			m = newSAMLMapping(
+				role.roleArn,
+				role.principalArn,
+				sc,
 			)
-			input := sts.AssumeRoleWithSAMLInput{
-				PrincipalArn:  &role.principalArn,
-				RoleArn:       &role.roleArn,
-				SAMLAssertion: sc.assertion,
-			}
-			result, err = client.AssumeRoleWithSAML(&input)
+			preAssumptions.Mappings = append(preAssumptions.Mappings, *m)
+		} else {
+			// set the saml stuff on the pre-known mapping
+			preAssumptions.setMappingSAMLStuff(role.roleArn, role.principalArn, sc)
 		}
+	}
+	// now that we have a bunch of new mappings we need to set relationships
+	err = preAssumptions.setRelationships(preAssumptions.parentFlow, preAssumptions.parentConfig)
+	if err != nil {
+		return err
+	}
+	// now go through all the mappings and do the assumptions
+	for i := range preAssumptions.Mappings {
+		err = preAssumptions.Mappings[i].assume()
 		if err != nil {
 			countFail++
-			goslogger.Loggo.Info("Error assuming role", "FlowName", *sc.sessionName, "Error", err.Error(), "RoleName", role.roleName, "RoleArn", role.roleArn)
+			goslogger.Loggo.Info("failed to assume SAML role", "error", err)
 		} else {
-			role.result = result
-			m.RoleArn = role.roleArn
-			m.ProfileName = role.identifier
-			m.credential = result.Credentials
-			mappings = append(mappings, &m)
 			countSuccess++
-			goslogger.Loggo.Info("Successfully assumed role", "FlowName", *sc.sessionName, "Identifier", role.identifier, "RoleArn", role.roleArn, "AccessKeyId", *role.result.Credentials.AccessKeyId)
 		}
 	}
 	goslogger.Loggo.Info("Finished attempt at assuming roles in SAML Assertion", "successes", countSuccess, "failures", countFail)
-	return mappings, err
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+	return err
 }

@@ -67,4 +67,8 @@ format:
 	gofmt -w ./*.go
 	golint
 	golint ./gossamer
+	go vet
+	go vet ./gossamer
+	staticcheck
+	staticcheck ./gossamer
 	go build -o t main.go
