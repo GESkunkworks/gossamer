@@ -30,7 +30,6 @@ testlite:
 	go get github.com/mattn/goveralls
 	go get github.com/sozorogami/gover
 	
-	go test -v "github.com/GESkunkworks/gossamer/acfmgr" -covermode=count -coverprofile=acfmgr.coverprofile
 	go test -v "github.com/GESkunkworks/gossamer/gossamer" -covermode=count -coverprofile=gossamer.coverprofile
 	gover
 
@@ -62,3 +61,14 @@ clean:
 	rm -rf $(build_dir_linux)
 	rm -rf $(build_dir_mac)
 	rm -rf $(build_dir_windows)	
+
+format:
+	gofmt -w ./gossamer/*.go
+	gofmt -w ./*.go
+	golint
+	golint ./gossamer
+	go vet
+	go vet ./gossamer
+	staticcheck
+	staticcheck ./gossamer
+	go build -o t main.go

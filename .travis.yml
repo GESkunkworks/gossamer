@@ -1,6 +1,6 @@
 language: go
 go:
-- '1.8'
+- '1.12'
 script:
   - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then make pr; fi'
   - 'if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then make nonpr; fi'
