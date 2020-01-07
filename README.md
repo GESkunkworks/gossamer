@@ -149,6 +149,7 @@ flows:
   #  run a flow using permament credentials. If no other  sub-parameters
   #  are present under permanent then it will try to use the normal auth
   #  flow provided by AWS (e.g., ENV vars, instance-profile, etc)
+  session_duration_seconds: 8600 # if you want every mapping to try and use the parent Flow's session duration you can set it here
   permanent:
     # mfa section being present will force the starter creds to first
     #  get an mfa enabled session using the provided serial and token
@@ -167,10 +168,11 @@ flows:
     # mappings are a list of roles to assume using the above starter creds
     mappings:
     - role_arn: arn:aws:iam::123456789012:role/role2 # the only mandatory field is a role_arn
-    - role_arn: arn:aws:iam::123456789012:role/sub-adminu
+    - role_arn: arn:aws:iam::123456789012:role/sub-admin
       profile_name: sub-admin # the optional profile name to give this credential. If not provided one will be generated using the format '<account_number>_<rolename>'
       region: us-west-2 # this region will override any imnherited region from parent flow
       no_output: true # in case you don't want the creds written to the output file
+      session_duration_seconds: 43200 # if you want to override the session duration at a mapping level you can do it here
   allow_failure: true # if no creds are generated during this flow gossamer will ignore and move to next flow
   do_not_propagate_region: false # in case you don't want to propagate the region down to the mappings from the flow's region
 - name: sample-saml
