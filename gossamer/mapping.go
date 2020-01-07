@@ -67,21 +67,27 @@ func (m *Mapping) validate() (err error) {
 		// grab from parents or set default
 		if m.parentAssumptions.durationSeconds == blankDuration {
 			if m.parentFlow.DurationSeconds == blankDuration {
+				goslogger.Loggo.Debug("setting duration blank in validate()")
 				// default
 				m.DurationSeconds = []int64{3600}[0]
 			} else {
 				// get from Flow
+				goslogger.Loggo.Debug("getting duration from parent flow")
 				m.DurationSeconds = m.parentFlow.DurationSeconds
 			}
 		} else {
 			// get from parent Assumptions
+			goslogger.Loggo.Debug("getting duration from parent assumptions")
 			m.DurationSeconds = m.parentAssumptions.durationSeconds
 		}
 	}
 	// samlSessionDuration overrides all of the above
 	if m.parentSAMLConfig != nil {
-		m.DurationSeconds = m.parentSAMLConfig.getSessionDuration()
-		if m.DurationSeconds == 0 {
+		samlDuration := m.parentSAMLConfig.getSessionDuration()
+		if samlDuration > 0 {
+			m.DurationSeconds = samlDuration
+		} else if !m.parentSAMLConfig.allowMappingDurationOverride {
+			goslogger.Loggo.Debug("setting duration blank in validate() in parentSAMLConfig checks")
 			// default
 			m.DurationSeconds = []int64{3600}[0]
 		}
@@ -159,10 +165,10 @@ func (m *Mapping) assumeNonSAML() (err error) {
 			&m.DurationSeconds,
 			sess,
 		)
-		goslogger.Loggo.Debug("set credential for mapping", "credential.AccessKeyId", *m.credential.AccessKeyId)
 		if err != nil {
 			return err
 		}
+		goslogger.Loggo.Debug("set credential for mapping", "credential.AccessKeyId", *m.credential.AccessKeyId)
 	} else {
 		err = errors.New("no session could be found to assume mapping")
 	}
@@ -189,8 +195,38 @@ func (m *Mapping) assume() (err error) {
 	}
 	if m.parentSAMLConfig != nil {
 		err = m.assumeSAML()
+		if err != nil {
+			goslogger.Loggo.Debug("failed to assume saml role", "error", err)
+		} else {
+			goslogger.Loggo.Debug("successfully assumed saml role", "profileName", m.ProfileName)
+		}
 	} else {
 		err = m.assumeNonSAML()
+		if err != nil {
+			goslogger.Loggo.Debug("failed to assume role", "error", err)
+		} else {
+			goslogger.Loggo.Debug("successfully assumed role", "profileName", m.ProfileName)
+		}
 	}
 	return err
+}
+
+func (m *Mapping) assumeChan(ch chan<- assumptionResult) {
+	err := m.assume()
+	ar := assumptionResult{
+		roleArn:     m.RoleArn,
+		profileName: m.ProfileName,
+		err:         err,
+	}
+	if err == nil {
+		ar.message = "success"
+	}
+	ch <- ar
+}
+
+type assumptionResult struct {
+	roleArn     string
+	profileName string
+	message     string
+	err         error
 }

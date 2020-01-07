@@ -10,6 +10,7 @@ import (
 )
 
 func assumeSAMLRoleWithSession(principalArn, roleArn, roleSessionName, assertion *string, duration *int64, client *sts.STS) (*sts.Credentials, error) {
+	goslogger.Loggo.Debug("preparing assumeSAMLRoleWithSession input", "duration", *duration)
 	input := sts.AssumeRoleWithSAMLInput{
 		PrincipalArn:    principalArn,
 		RoleArn:         roleArn,
@@ -18,13 +19,11 @@ func assumeSAMLRoleWithSession(principalArn, roleArn, roleSessionName, assertion
 	}
 	result, err := client.AssumeRoleWithSAML(&input)
 	if err == nil && *duration > 3600 {
-		goslogger.Loggo.Info("Successfully assumed session extended SAML session duration", "duration", *duration)
+		goslogger.Loggo.Debug("Successfully assumed session extended SAML session duration", "duration", *duration)
 	}
-	if err != nil && strings.Contains(err.Error(), "DurationSeconds exceeds the MaxSessionDuration") {
+	if err != nil && detectedDurationProblem(err) {
+		goslogger.Loggo.Debug("defaulting to standard duration")
 		// warn and bump the duration down to default
-		goslogger.Loggo.Debug(
-			"WARNING: The requested DurationSeconds exceeds the MaxSessionDuration set for this role. Removing duration parameter.",
-		)
 		input := sts.AssumeRoleWithSAMLInput{
 			PrincipalArn:  principalArn,
 			RoleArn:       roleArn,
@@ -53,14 +52,12 @@ func assumeRoleWithSession(roleArn, roleSessionName *string, duration *int64, se
 	}
 	aso, err := client.AssumeRole(&input)
 	if err == nil && *duration > 3600 {
-		goslogger.Loggo.Info("Successfully assumed extended session duration.")
+		goslogger.Loggo.Debug("Successfully assumed extended session duration.")
 	}
 	// detect any errors we can handle
-	if err != nil && strings.Contains(err.Error(), "DurationSeconds exceeds the MaxSessionDuration") {
+	if err != nil && detectedDurationProblem(err) {
 		// warn and bump the duration down to default
-		goslogger.Loggo.Debug(
-			"WARNING: The requested DurationSeconds exceeds the MaxSessionDuration set for this role. Removing duration parameter",
-		)
+		goslogger.Loggo.Debug("defaulting to standard duration")
 		input := sts.AssumeRoleInput{
 			RoleArn:         roleArn,
 			RoleSessionName: roleSessionName,
@@ -70,8 +67,23 @@ func assumeRoleWithSession(roleArn, roleSessionName *string, duration *int64, se
 	return aso.Credentials, err
 }
 
+func detectedDurationProblem(err error) bool {
+	if err != nil {
+		chainingProblem := "DurationSeconds exceeds the 1 hour session limit for roles assumed by role chaining"
+		configProblem := "DurationSeconds exceeds the MaxSessionDuration"
+		if strings.Contains(err.Error(), configProblem) {
+			goslogger.Loggo.Debug("WARNING: requested DurationSeconds exceeds the MaxSessionDuration set for this role")
+			return true
+		} else if strings.Contains(err.Error(), chainingProblem) {
+			goslogger.Loggo.Debug("WARNING: The requested DurationSeconds exceeds the 1 hour session limit for roles assumed by role chaining.")
+			return true
+		}
+	}
+	return false
+}
+
 // generateRoleSessionName runs a GetCallerIdentity API call
-// to try and auto generate the role session name from an
+// to try and auto generate the role session name from a
 // established session.
 func generateRoleSessionName(sess *session.Session) string {
 	client := sts.New(sess)
@@ -91,12 +103,12 @@ func (f *Flow) getPermSession() (sess *session.Session, err error) {
 		// means we have a session we can already use
 		return f.sharedSession, err
 	}
-	goslogger.Loggo.Info("no session detected for flow, establishing new")
+	goslogger.Loggo.Debug("no session detected for flow, establishing new")
 	if f.PermCredsConfig != nil {
 		if len(f.PermCredsConfig.ProfileName) > 0 && len(f.Region) > 0 {
 			goslogger.Loggo.Debug("using profile for session with specific region", "flowname", f.Name)
 			if awsEnvSet() {
-				goslogger.Loggo.Info("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
+				goslogger.Loggo.Debug("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
 			}
 			sess = session.Must(session.NewSessionWithOptions(session.Options{
 				Config:  aws.Config{Region: &f.Region},
@@ -105,7 +117,7 @@ func (f *Flow) getPermSession() (sess *session.Session, err error) {
 		} else if len(f.PermCredsConfig.ProfileName) > 0 {
 			goslogger.Loggo.Debug("using profile for session", "flowname", f.Name)
 			if awsEnvSet() {
-				goslogger.Loggo.Info("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
+				goslogger.Loggo.Debug("WARNING: some AWS_* environment variables are set that may interfere with profile session establishment")
 			}
 			sess, err = session.NewSessionWithOptions(session.Options{
 				Profile: f.PermCredsConfig.ProfileName,
@@ -122,7 +134,7 @@ func (f *Flow) getPermSession() (sess *session.Session, err error) {
 			// * Shared Credentials file
 			// * Shared Configuration file (if SharedConfig is enabled)
 			// * EC2 Instance Metadata (credentials only)
-			goslogger.Loggo.Info("no profile specified so attempting default cred loader from ENV vars, etc", "flowname", f.Name)
+			goslogger.Loggo.Debug("no profile specified so attempting default cred loader from ENV vars, etc", "flowname", f.Name)
 			sess, err = session.NewSession()
 			if err != nil {
 				return sess, err

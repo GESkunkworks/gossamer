@@ -45,7 +45,6 @@ type Flow struct {
 	DoNotPropagateRegion bool             `yaml:"do_not_propagate_region"`
 	AllowFailure         bool             `yaml:"allow_failure"`
 	credsType            string
-	roleSessionName      string
 	parentConfig         *Config
 	sharedSession        *session.Session
 }
@@ -81,11 +80,11 @@ func (pcc *PermCredsConfig) validate() (ok bool, err error) {
 
 // SAMLConfig holds specific parameters for SAML configuration
 type SAMLConfig struct {
-	Username *CParam `yaml:"username"`
-	Password *CParam `yaml:"password"`
-	URL      *CParam `yaml:"url"`
-	Target   *CParam `yaml:"target"`
-	//TODO: support Duration
+	Username                     *CParam `yaml:"username"`
+	Password                     *CParam `yaml:"password"`
+	URL                          *CParam `yaml:"url"`
+	Target                       *CParam `yaml:"target"`
+	AllowMappingDurationOverride bool    `yaml:"allow_mapping_duration_override,omitempty"`
 }
 
 func (sc *SAMLConfig) validate() (ok bool, err error) {
@@ -205,6 +204,37 @@ func (a *Assumptions) getRoleSessionName() *string {
 	return (&a.roleSessionName)
 }
 
+func (a *Assumptions) assumeMappingsConcurrent() {
+	q := make(chan assumptionResult)
+	if len(a.Mappings) > 0 {
+		goslogger.Loggo.Info("assuming first role to establish initial session")
+		go a.Mappings[0].assumeChan(q)
+		// wait for the response so we can have a cred for the rest
+		result := <-q
+		goslogger.Loggo.Info(
+			"got result of assumption",
+			"message", result.message,
+			"error", result.err,
+			"profileName", result.profileName,
+		)
+	}
+	if len(a.Mappings) > 1 {
+		// now do the rest
+		for i := 1; i < len(a.Mappings); i++ {
+			go a.Mappings[i].assumeChan(q)
+		}
+		for i := 1; i < len(a.Mappings); i++ {
+			result := <-q
+			goslogger.Loggo.Info(
+				"got result of assumption",
+				"message", result.message,
+				"error", result.err,
+				"profileName", result.profileName,
+			)
+		}
+	}
+}
+
 // convertSCredstoCreds converts credentials from the sts to the credentials package
 // per the specifications of the golan AWS SDK
 func convertSCredsToCreds(screds *sts.Credentials) (creds *credentials.Credentials) {
@@ -257,8 +287,30 @@ func (a *Assumptions) setMappingSAMLStuff(roleArn, principalArn string, sc *saml
 	}
 }
 
-// GetAcfmgrProfileInputs converts mappings into Acfmgr ProfileEntryInput for easy use with AcfMgr package
-func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput, err error) {
+// GetAcfmgrProfileInputs converts all flow's mappings into Acfmgr ProfileEntryInput for easy use with AcfMgr package
+func (f *Flow) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput, err error) {
+	primary, err := f.PAss.getAcfmgrProfileInputs()
+	if err != nil {
+		return pfis, err
+	}
+	for _, p := range primary {
+		pfis = append(pfis, p)
+	}
+	if !f.NoSAss() {
+		secondary, err := f.SAss.getAcfmgrProfileInputs()
+		if err != nil {
+			return pfis, err
+		}
+		for _, p := range secondary {
+			pfis = append(pfis, p)
+		}
+		return pfis, err
+	}
+	return pfis, err
+}
+
+// getAcfmgrProfileInputs converts mappings into Acfmgr ProfileEntryInput for easy use with AcfMgr package
+func (a *Assumptions) getAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput, err error) {
 	countSuccess := 0
 	countFail := 0
 	total := len(pfis)
@@ -267,7 +319,6 @@ func (a *Assumptions) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput
 		if !mapping.NoOutput {
 			cred, err := mapping.getCredential()
 			if err != nil {
-				goslogger.Loggo.Error("error retrieiving credential", "error", err)
 				countFail++
 			} else {
 				profileInput := acfmgr.ProfileEntryInput{

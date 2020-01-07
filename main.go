@@ -77,32 +77,17 @@ func main() {
 		c, err := acfmgr.NewCredFileSession(gc.OutFile)
 		handle(err)
 		// regardless of the flow type we'll always run primary
-		err = flow.ExecutePrimary()
+		err = flow.Execute()
 		handle(err)
 		// queue entries to write to file
 		goslogger.Loggo.Info("queueing primary assumptions to write to file")
-		pfisPrimary, err := flow.PAss.GetAcfmgrProfileInputs()
+		pfis, err := flow.GetAcfmgrProfileInputs()
 		handle(err)
 		count := 0
-		for _, pfi := range pfisPrimary {
+		for _, pfi := range pfis {
 			err = c.NewEntry(pfi)
 			if err == nil {
 				count++
-			}
-		}
-		// now handle SecondaryAssertions (if any)
-		if !flow.NoSAss() {
-			err = flow.GetSAss()
-			handle(err)
-			goslogger.Loggo.Debug("flow > saml > GetSAss: done")
-			goslogger.Loggo.Info("queueing secondary assumptions to write to file")
-			pfisSecondary, err := flow.SAss.GetAcfmgrProfileInputs()
-			handle(err)
-			for _, pfi := range pfisSecondary {
-				err = c.NewEntry(pfi)
-				if err == nil {
-					count++
-				}
 			}
 		}
 

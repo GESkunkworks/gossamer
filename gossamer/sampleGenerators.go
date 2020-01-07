@@ -68,6 +68,7 @@ func newSampleSAMLConfig() *SAMLConfig {
 	sc.Password = &p
 	sc.URL = &url
 	sc.Target = &t
+	sc.AllowMappingDurationOverride = true
 	return &sc
 }
 

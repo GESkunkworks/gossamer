@@ -96,16 +96,17 @@ func (sc *samlSessionConfig) decodeAssertion() (err error) {
 // the SAML session including things like the username/password
 // and the URL
 type samlSessionConfig struct {
-	sessionName     *string
-	roles           []*samlRole
-	assertion       *string
-	samlUser        *string
-	samlPass        *string
-	samlURL         *string
-	samlTarget      *string
-	roleSessionName *string
-	sessionDuration *string
-	stsClient       *sts.STS
+	sessionName                  *string
+	roles                        []*samlRole
+	assertion                    *string
+	samlUser                     *string
+	samlPass                     *string
+	samlURL                      *string
+	samlTarget                   *string
+	roleSessionName              *string
+	sessionDuration              *string
+	stsClient                    *sts.STS
+	allowMappingDurationOverride bool
 }
 
 func (sc *samlSessionConfig) getSessionDuration() (duration int64) {
@@ -116,8 +117,6 @@ func (sc *samlSessionConfig) getSessionDuration() (duration int64) {
 		if err != nil {
 			duration = 0
 		}
-	} else {
-		goslogger.Loggo.Debug("SAML Assertion did not provide session duration, using default")
 	}
 	return duration
 }
@@ -133,13 +132,16 @@ type samlRole struct {
 // newSAMLSessionConfig returns a samlSessionConfig struct whose methods can be
 // called to start a SAML session via HTTP and also assume roles that come back
 // from the session's assertion
-func newSAMLSessionConfig(sessionname, samluser, samlpass, samlurl, samltarget string) samlSessionConfig {
+func newSAMLSessionConfig(
+	sessionname, samluser, samlpass, samlurl, samltarget string,
+	allowMappingDurationOverride bool) samlSessionConfig {
 	var sc samlSessionConfig
 	sc.sessionName = &sessionname
 	sc.samlUser = &samluser
 	sc.samlPass = &samlpass
 	sc.samlURL = &samlurl
 	sc.samlTarget = &samltarget
+	sc.allowMappingDurationOverride = allowMappingDurationOverride
 	return sc
 }
 
@@ -287,8 +289,6 @@ func (sc *samlSessionConfig) getAssertion() (err error) {
 // SAMLRoles that have been built thus far
 func (sc *samlSessionConfig) assumeSAMLRoles(preAssumptions *Assumptions) (err error) {
 	sc.stsClient = sts.New(session.Must(session.NewSession()))
-	countSuccess := 0
-	countFail := 0
 	// add mappings from saml assertion we don't know about already
 	for _, role := range sc.roles {
 		var found bool
@@ -316,15 +316,6 @@ func (sc *samlSessionConfig) assumeSAMLRoles(preAssumptions *Assumptions) (err e
 		return err
 	}
 	// now go through all the mappings and do the assumptions
-	for i := range preAssumptions.Mappings {
-		err = preAssumptions.Mappings[i].assume()
-		if err != nil {
-			countFail++
-			goslogger.Loggo.Info("failed to assume SAML role", "error", err)
-		} else {
-			countSuccess++
-		}
-	}
-	goslogger.Loggo.Info("Finished attempt at assuming roles in SAML Assertion", "successes", countSuccess, "failures", countFail)
+	preAssumptions.assumeMappingsConcurrent()
 	return err
 }

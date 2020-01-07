@@ -127,6 +127,10 @@ func (gc *Config) ConvertLegacyFlagsToConfig(gfl *GossFlags) (err error) {
 			return err
 		}
 	}
+	err = gc.setRelationships()
+	if err != nil {
+		return err
+	}
 	goslogger.Loggo.Info("wrote configuration to file", "filename", gfl.GeneratedConfigOutputFile)
 	return err
 }

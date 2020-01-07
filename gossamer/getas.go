@@ -1,3 +1,19 @@
+// Package gossamer is a toolkit for assuming AWS roles concurrently
+// via permanent credentials or SAML. Its behavior is driven by a Config struct
+// that defines auth flows that are defined by their starter credentials,
+// the primary mappings, and secondary mappings.
+// Mappings are a concept of a role ARN tied to a profile entry name with
+// some additional metadata. Secondary mappings are aware that they must
+// be assumed using a previously established primary mapping.
+//
+// Each flow can then be executed using its Execute method which will run
+// the appropriate auth flow and collect the mappings' credentials.
+//
+// After the flow has been executed the GetAcfmgrProfileInputs method
+// can be called in order to collect the results of the mappings as
+// inputs for the Acfmgr package which is a helper utility for writing
+// AWS credential profile entries to a file.
+//
 package gossamer
 
 import (
@@ -10,21 +26,7 @@ func (f *Flow) GetPAss() error {
 	var masterErr error
 	var err error
 	goslogger.Loggo.Info("starting Primary assumptions", "flowName", f.Name)
-	for i := range f.PAss.Mappings {
-		err = f.PAss.Mappings[i].assume()
-		if err != nil {
-			goslogger.Loggo.Error("Error assuming primary mapping",
-				"PrimaryMapping", f.PAss.Mappings[i].RoleArn,
-				"flowType", f.credsType,
-				"Error", err,
-			)
-		} else {
-			goslogger.Loggo.Info("Successfully assumed Primary Mapping",
-				"mapping", f.PAss.Mappings[i].RoleArn,
-				"flowType", f.credsType,
-			)
-		}
-	}
+	f.PAss.assumeMappingsConcurrent()
 	if !f.AllowFailure {
 		masterErr = err
 	}
@@ -52,28 +54,39 @@ func (f *Flow) GetPAssSAML() error {
 		return err
 	}
 
-	sc := newSAMLSessionConfig(f.Name, samluser, samlpass, samlurl, samltarget)
+	sc := newSAMLSessionConfig(
+		f.Name, samluser, samlpass, samlurl, samltarget, f.SAMLConfig.AllowMappingDurationOverride,
+	)
 	err = sc.startSAMLSession()
 	if err != nil {
 		return err
 	}
+	// set the session name for later in case we need it for secondary assumptions
+	goslogger.Loggo.Debug("setting roleSessionName on assumptions", "roleSessionName", *sc.roleSessionName)
+	f.PAss.setRoleSessionName(*sc.roleSessionName)
 
 	err = sc.assumeSAMLRoles(f.PAss)
-	if err != nil {
-		return err
-	}
-	goslogger.Loggo.Debug("flow > saml > AssumeSAMLRoles: done")
-	// set the session name for later in case we need it for secondary assumptions
-	f.roleSessionName = *sc.roleSessionName
 	if !f.AllowFailure {
 		masterErr = err
 	}
 	return masterErr
 }
 
-// ExecutePrimary runs the appropriate steps to complete the Primary Assumptions
+// Execute detects the flow type and runs the appropriate steps to complete
+// either the primary or secondary assumptions
+func (f *Flow) Execute() (err error) {
+	// every flow always has a primary
+	err = f.executePrimary()
+	if err != nil {
+		return err
+	}
+	err = f.executeSecondary()
+	return err
+}
+
+// executePrimary runs the appropriate steps to complete the Primary Assumptions
 // auth flow for the detected flow type
-func (f *Flow) ExecutePrimary() (err error) {
+func (f *Flow) executePrimary() (err error) {
 	switch f.credsType {
 	case "saml":
 		err = f.GetPAssSAML()
@@ -91,30 +104,18 @@ func (f *Flow) ExecutePrimary() (err error) {
 	return err
 }
 
-// GetSAss goes through all of the secondary assumptions (if any) and collects credentials
+// executeSecondary goes through all of the secondary assumptions (if any) and collects credentials
 // it's very lenient and only returns errors if they are critical.
-func (f *Flow) GetSAss() error {
+func (f *Flow) executeSecondary() error {
 	var masterErr error
 	var err error
-	goslogger.Loggo.Info("starting Primary assumptions", "flowName", f.Name)
 	if !f.NoSAss() {
+		goslogger.Loggo.Info("starting secondary assumptions", "flowName", f.Name)
 		// first we need to make absolutely sure we carry over the RoleSessionName for security purposes.
 		rsn := f.PAss.getRoleSessionName()
 		f.SAss.setRoleSessionName(*rsn)
 		// run a precheck on the mappings to make sure stuff is set like duration
-		for i := range f.SAss.Mappings {
-			err = f.SAss.Mappings[i].assume()
-			if err != nil {
-				goslogger.Loggo.Error("Error assuming secondary mapping",
-					"SecondaryMapping", f.SAss.Mappings[i].RoleArn,
-					"Error", err,
-				)
-			} else {
-				goslogger.Loggo.Info("Successfully assumed Secondary Mapping",
-					"mapping", f.SAss.Mappings[i].RoleArn,
-				)
-			}
-		}
+		f.SAss.assumeMappingsConcurrent()
 	} else {
 		goslogger.Loggo.Info("no secondary assumptions detected so skipping", "flowname", f.Name)
 	}
