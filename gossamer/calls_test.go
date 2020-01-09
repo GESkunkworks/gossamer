@@ -35,8 +35,7 @@ func getFakeCreds() *sts.Credentials {
 	return &cred
 }
 
-
-func getFakeAssumedRoleUser() (*sts.AssumedRoleUser) {
+func getFakeAssumedRoleUser() *sts.AssumedRoleUser {
 	aru := sts.AssumedRoleUser{
 		Arn:           &[]string{"arn:aws:sts::123456789321:assumed-role/bu-readonly/212555555"}[0],
 		AssumedRoleId: &[]string{"AROEIQPVJAEI7JWAN6FXW:212555555"}[0],
@@ -55,8 +54,8 @@ func (m *mockSTSClient) GetCallerIdentity(input *sts.GetCallerIdentityInput) (ou
 	}
 	o := sts.GetCallerIdentityOutput{
 		Account: &[]string{"123456789654"}[0],
-		Arn: &[]string{"arn:aws:sts::123456789654:assumed-role/oo/cool-dude"}[0],
-		UserId: &[]string{"AROWPVJQMNDGYETTAV5EO:cool-dude"}[0],
+		Arn:     &[]string{"arn:aws:sts::123456789654:assumed-role/oo/cool-dude"}[0],
+		UserId:  &[]string{"AROWPVJQMNDGYETTAV5EO:cool-dude"}[0],
 	}
 	output = &o
 	return output, err
@@ -87,12 +86,11 @@ func (m *mockSTSClient) AssumeRole(input *sts.AssumeRoleInput) (output *sts.Assu
 	aru := getFakeAssumedRoleUser()
 	o := sts.AssumeRoleOutput{
 		AssumedRoleUser: aru,
-		Credentials: getFakeCreds(),
+		Credentials:     getFakeCreds(),
 	}
 	output = &o
 	return output, err
 }
-
 
 func TestAssumeSAMLRoleWithSession(t *testing.T) {
 	initLog()
@@ -106,12 +104,12 @@ func TestAssumeSAMLRoleWithSession(t *testing.T) {
 		duration         *int64
 	}{
 		{
-			principalArn:     &[]string{"arn:aws:iam::987654321654:saml-provider/oo-saml-for-aws-mfa"}[0],
-			roleArn:          &[]string{"arn:aws:iam::987654321654:role/oo/cool-role"}[0],
-			roleSessionName:  &[]string{"212555555"}[0],
-			assertion:        &[]string{"somereallylongstring"}[0],
-			duration:         &[]int64{9600}[0],
-			result:           getFakeCreds(),
+			principalArn:    &[]string{"arn:aws:iam::987654321654:saml-provider/oo-saml-for-aws-mfa"}[0],
+			roleArn:         &[]string{"arn:aws:iam::987654321654:role/oo/cool-role"}[0],
+			roleSessionName: &[]string{"212555555"}[0],
+			assertion:       &[]string{"somereallylongstring"}[0],
+			duration:        &[]int64{9600}[0],
+			result:          getFakeCreds(),
 		},
 		{
 			principalArn:     &[]string{"arn:aws:iam::987654321654:saml-provider/oo-saml-for-aws-mfa"}[0],
@@ -180,10 +178,10 @@ func TestAssumeRoleWithClient(t *testing.T) {
 	}{
 		{
 			// happy path
-			roleArn:          &[]string{"arn:aws:iam::987654321654:role/oo/cool-role"}[0],
-			roleSessionName:  &[]string{"212555555"}[0],
-			duration:         &[]int64{3600}[0],
-			result:           getFakeCreds(),
+			roleArn:         &[]string{"arn:aws:iam::987654321654:role/oo/cool-role"}[0],
+			roleSessionName: &[]string{"212555555"}[0],
+			duration:        &[]int64{3600}[0],
+			result:          getFakeCreds(),
 		},
 		{
 			// make sure it's handling duration exceeds error aws sometimes throws
@@ -243,7 +241,7 @@ func TestGenerateRoleSessionName(t *testing.T) {
 	}{
 		{
 			// happy path - prefix principal with gossamer
-			result:           "gossamer-cool-dude",
+			result: "gossamer-cool-dude",
 		},
 		{
 			// happy path
