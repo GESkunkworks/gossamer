@@ -2,14 +2,51 @@ package gossamer
 
 import (
 	"errors"
+	"fmt"
 	"github.com/GESkunkworks/gossamer/goslogger"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+
 	"strings"
 )
 
-func assumeSAMLRoleWithSession(principalArn, roleArn, roleSessionName, assertion *string, duration *int64, client *sts.STS) (*sts.Credentials, error) {
+func detectNilStringPointer(label string, pointer *string) (isnil bool, err error) {
+	if pointer == nil {
+		isnil = true
+		msg := fmt.Sprintf("%s is nil", label)
+		err = errors.New(msg)
+	}
+	return isnil, err
+}
+
+func detectNilInt64Pointer(label string, pointer *int64) (isnil bool, err error) {
+	if pointer == nil {
+		isnil = true
+		msg := fmt.Sprintf("%s is nil", label)
+		err = errors.New(msg)
+	}
+	return isnil, err
+}
+
+func assumeSAMLRoleWithSession(principalArn, roleArn, roleSessionName, assertion *string, duration *int64, client stsiface.STSAPI) (*sts.Credentials, error) {
+	var c *sts.Credentials
+	if isnil, err := detectNilStringPointer("principalArn", principalArn); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilStringPointer("roleArn", roleArn); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilStringPointer("roleSessionName", roleSessionName); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilStringPointer("assertion", assertion); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilInt64Pointer("duration", duration); isnil {
+		return c, err
+	}
 	goslogger.Loggo.Debug("preparing assumeSAMLRoleWithSession input", "duration", *duration)
 	input := sts.AssumeRoleWithSAMLInput{
 		PrincipalArn:    principalArn,
@@ -31,20 +68,32 @@ func assumeSAMLRoleWithSession(principalArn, roleArn, roleSessionName, assertion
 		}
 		result, err = client.AssumeRoleWithSAML(&input)
 	}
+	if err != nil {
+		return c, err
+	}
 	return result.Credentials, err
 }
 
-// assumeRoleWithSession takes an existing session and sets up the assume role inputs for
+// assumeRoleWithClient takes an existing session and sets up the assume role inputs for
 // the API call
-func assumeRoleWithSession(roleArn, roleSessionName *string, duration *int64, sess *session.Session) (*sts.Credentials, error) {
+func assumeRoleWithClient(roleArn, roleSessionName *string, duration *int64, client stsiface.STSAPI) (*sts.Credentials, error) {
+	var c *sts.Credentials
+	if isnil, err := detectNilInt64Pointer("duration", duration); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilStringPointer("roleArn", roleArn); isnil {
+		return c, err
+	}
+	if isnil, err := detectNilStringPointer("roleSessionName", roleSessionName); isnil {
+		return c, err
+	}
 	// set a default in case duration comes in blank
 	var blankDuration int64
 	if *duration == blankDuration {
 		goslogger.Loggo.Debug("detected blank duration, setting to a hard default")
 		duration = &[]int64{3600}[0]
 	}
-	client := sts.New(sess)
-	goslogger.Loggo.Debug("preparing assumeRoleWithSession input", "duration", *duration)
+	goslogger.Loggo.Debug("preparing assumeRoleWithClient input", "duration", *duration)
 	input := sts.AssumeRoleInput{
 		RoleArn:         roleArn,
 		RoleSessionName: roleSessionName,
@@ -63,6 +112,9 @@ func assumeRoleWithSession(roleArn, roleSessionName *string, duration *int64, se
 			RoleSessionName: roleSessionName,
 		}
 		aso, err = client.AssumeRole(&input)
+	}
+	if err != nil {
+		return c, err
 	}
 	return aso.Credentials, err
 }
@@ -84,9 +136,8 @@ func detectedDurationProblem(err error) bool {
 
 // generateRoleSessionName runs a GetCallerIdentity API call
 // to try and auto generate the role session name from a
-// established session.
-func generateRoleSessionName(sess *session.Session) string {
-	client := sts.New(sess)
+// established client.
+func generateRoleSessionName(client stsiface.STSAPI) string {
 	callerIdentity, err := client.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 	if err != nil {
 		return "gossamer"
@@ -148,7 +199,8 @@ func (f *Flow) getPermSession() (sess *session.Session, err error) {
 	}
 	// try to get the role session name from the session we just got
 	// because we want the pure name before the MFA session if any
-	f.PAss.setRoleSessionName(generateRoleSessionName(sess))
+	stsClient := sts.New(sess)
+	f.PAss.setRoleSessionName(generateRoleSessionName(stsClient))
 	// now we need to check and see if we need to establish MFA on the session
 	goslogger.Loggo.Debug("checking for presence of MFA")
 	if f.PermCredsConfig.MFA != nil {

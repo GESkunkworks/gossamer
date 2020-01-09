@@ -36,3 +36,21 @@ func SetLogger(daemonFlag bool, logFileS, loglevel string) {
 				log15.Must.FileHandler(logFileS, log15.JsonFormat()))))
 	}
 }
+
+// SetTestLogger sets up an appropriate logger for running tests
+func SetLoggerTesting(loglevel string) {
+	Loggo = log15.New()
+	if loglevel == "debug" {
+		// log to stdout only
+		Loggo.SetHandler(
+			log15.LvlFilterHandler(
+				log15.LvlDebug,
+				log15.StreamHandler(os.Stdout, log15.LogfmtFormat())))
+	} else {
+		// log to stdout only
+		Loggo.SetHandler(
+			log15.LvlFilterHandler(
+				log15.LvlInfo,
+				log15.StreamHandler(os.Stdout, log15.LogfmtFormat())))
+	}
+}
