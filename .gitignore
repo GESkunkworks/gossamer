@@ -3,4 +3,6 @@ Jecrets
 *.swp
 *.log.json
 output*/
+*.coverprofile
+.DS_Store
 
