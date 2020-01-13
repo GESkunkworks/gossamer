@@ -1,8 +1,6 @@
 language: go
 go:
   - '1.12'
-env:
-  - GO111MODULE=on
 script:
   - 'if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then make pr; fi'
   - 'if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then make nonpr; fi'
@@ -17,6 +15,7 @@ deploy:
     repo: GESkunkworks/gossamer
     tags: true
 env:
+  - GO111MODULE=on
   global:
   - secure: eP6OwhML6aiv4xvRPM4fLqaPWNLDJhjs6apH5anHjGgkCwY+OjEO+ABGiy2VPQOCXgpnwQBC5QZWSOBPffamBujyoXMFccebp0MxcS9FapKDI/OUVgk3cGCkNikDFeA/DJXgjjkTRB48LMzuOI/E/3aBvteQL4OfWpTFUGuZfp/GU2lcxBfG0uLO5crBFwHpZ9tbjxSvOsMS7rsOQ3Xybb7mN56HbmGCyh9Hd78ftK/b7pHzMLnnzp7MK9N5DLfvPWbM3SJfOmGOwQ0OK4T0t1MWiWWWtAFCyiXPHLJ/bKuwV3IYk9di7qaa8osFoQhazmfySqO5HPvVxIgySDh4W1wBl9BuwMFXXcnf9z8IPKWrKhRvtfWj+Z2B/DGlUh1utTpyoXLqHEf3v39aOWsLeZdpUOkeAmSygSdRrAEvNpbBmi/TphqARvZdTbS2EKXZo6ESrPndFQjBtXbLR8GWLrTFgAsPCLWOC6QE7yt6XIinZVP7WrLqnI4+sDl3KLEIXVgAc25pwClrguXt5/oa/xC3FZnHsO7sTeEE+KnoLPNVzxLE1JfMUtkeFZtymRVtjRYa8LVppCIJnEY1ceah3OU3iv1VSG1DYNxcSWwv6lQ8f3/N7Zfl0dFiLjVacGqedpPhg4Uhjuzc13BiTFaLGB5Wq7XUmCq5cqawhq9ItOk=
   - secure: kRTuhV8zaW5b/MO3tjc+8UMM04w2wPiwvWQz5D51HctTN3chBKulVcJrimGeT6hT260NrNfoPWp1zYDdykAFVFf9tlNOdvx5ftTjB+cTiveh344jx98HUQw3MD/0wpQsQWXmBcDU5En52nE3jOuA6LWYcH+oZKMJI9guKKPHm0BWnhHGqK9q6meCCEWcES5BJGj2aKXAppuG4tj3bXSh5wwBXVfSlwoXeqDe7ECbx4MlO243hZx2QijQx89tnmchmfB4kwkKcTnzmBCAPw89dRQY5YvouhSwXyPQ1WwshLmmVA6JJJia0LdkT89BUKj48Y9ia5GCDRYwSodvWtxyYePy9uFt/ejXjzVKFPAp3ois18i2rfIvQjJG3gbQCNicqXr3I0+yp0i/j33pXUoR7lJU/9YB11J/4Myq0Hf+vy4q6SQSAMHB/6VaXKRgnHeCBEXO8SVg9bWm/Tcof7jy7MyieBr3n9Hn79Tdtg9utTwE5vMToysMJDpX3XKwrva3J5VFc3tNb5xOP5HS0EkKvuofOWG5tK6QeFKAqsJ/B/Nk5WFD9T81bczQngwX0Yyd/6PenLVCNXxBbzOKq5FLVqri44Q+NaDBzS66/d33P5dnyx280E+ARr1xptYdshQ0fyvshexY1/LPRh2vQghs1+H50p46gGvywKFhNsRSMHw=
