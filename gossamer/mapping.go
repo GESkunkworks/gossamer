@@ -159,11 +159,12 @@ func (m *Mapping) assumeNonSAML() (err error) {
 	}
 	m.setDurationIfNotSet(m.parentAssumptions.durationSeconds)
 	if sess != nil {
-		m.credential, err = assumeRoleWithSession(
+		client := sts.New(sess)
+		m.credential, err = assumeRoleWithClient(
 			&m.RoleArn,
 			m.parentAssumptions.getRoleSessionName(),
 			&m.DurationSeconds,
-			sess,
+			client,
 		)
 		if err != nil {
 			return err

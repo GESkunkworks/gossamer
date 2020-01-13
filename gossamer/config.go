@@ -293,17 +293,13 @@ func (f *Flow) GetAcfmgrProfileInputs() (pfis []*acfmgr.ProfileEntryInput, err e
 	if err != nil {
 		return pfis, err
 	}
-	for _, p := range primary {
-		pfis = append(pfis, p)
-	}
+	pfis = append(pfis, primary...)
 	if !f.NoSAss() {
 		secondary, err := f.SAss.getAcfmgrProfileInputs()
 		if err != nil {
 			return pfis, err
 		}
-		for _, p := range secondary {
-			pfis = append(pfis, p)
-		}
+		pfis = append(pfis, secondary...)
 		return pfis, err
 	}
 	return pfis, err
