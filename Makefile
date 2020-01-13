@@ -14,16 +14,17 @@ build_dir_mac := output-mac
 build_dir_windows := output-windows
 
 # Can't use secrets in pull request builds
-pr: deps testlite configure build-linux build-mac build-windows
+pr: testlite configure build-linux build-mac build-windows
 
 nonpr: build
 
-build: deps testfull configure build-linux build-mac build-windows
+build: testfull configure build-linux build-mac build-windows
 
-bare: deps configure build-linux build-mac build-windows
+buildlocal: export TRAVIS_TAG = "9.9.9"
+buildlocal: export TRAVIS_BUILD_NUMBER = "1"
+buildlocal: testlite testlite configure build-linux build-mac build-windows
 
-deps:
-	go get -t ./...
+bare: configure build-linux build-mac build-windows
 
 testlite:
 	go get golang.org/x/tools/cmd/cover
@@ -35,6 +36,7 @@ testlite:
 
 testfull: testlite
 	goveralls -coverprofile gover.coverprofile -service=travis-ci -repotoken $(COVERALLS_TOKEN) 
+
 
 configure:
 	mkdir $(build_dir)
