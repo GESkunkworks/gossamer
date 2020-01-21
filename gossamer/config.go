@@ -75,6 +75,21 @@ type PermCredsConfig struct {
 
 func (pcc *PermCredsConfig) validate() (ok bool, err error) {
 	//TODO: Add validators
+    ok = true
+    if pcc.MFA != nil {
+        if pcc.MFA.Serial != nil {
+            ok, err = pcc.MFA.Serial.validate()
+            if !ok {
+                return ok, err
+            }
+        }
+        if pcc.MFA.Token != nil {
+            ok, err = pcc.MFA.Token.validate()
+            if !ok {
+                return ok, err
+            }
+        }
+    }
 	return ok, err
 }
 
@@ -89,6 +104,7 @@ type SAMLConfig struct {
 
 func (sc *SAMLConfig) validate() (ok bool, err error) {
 	//TODO: Add some validation here
+    ok = true
 	return ok, err
 }
 
@@ -105,6 +121,24 @@ type CParam struct {
 	gathered   bool
 	result     string
 	parentflow string
+}
+
+func (c *CParam) validate() (valid bool, err error) {
+    validSources := []string{"config","env","prompt"}
+    found := false
+    for _, val := range(validSources) {
+        if val == c.Source {
+            found = true
+        }
+    }
+    valid = found
+    if !found {
+        msg := fmt.Sprintf("value for source '%s' is invalid must be one of '%s'",
+            c.Source, validSources)
+        err = errors.New(msg)
+    }
+    return valid, err
+
 }
 
 // gather looks at the source of the config parameter
@@ -372,12 +406,18 @@ func (f *Flow) Validate() (valid bool, err error) {
 	case f.SAMLConfig != nil && f.PermCredsConfig == nil:
 		f.credsType = "saml"
 		valid, err = f.SAMLConfig.validate()
+        if !valid {
+            goslogger.Loggo.Debug("got invalid samlconfig")
+        }
 		if err != nil {
 			return valid, err
 		}
 	case f.SAMLConfig == nil && f.PermCredsConfig != nil:
 		f.credsType = "permanent"
 		valid, err = f.PermCredsConfig.validate()
+        if !valid {
+            goslogger.Loggo.Debug("got invalid permcredsconfig")
+        }
 		if err != nil {
 			return valid, err
 		}
@@ -558,4 +598,14 @@ func (gc *Config) setRelationships() (err error) {
 		}
 	}
 	return err
+}
+
+func (gc *Config) Validate() (valid bool, err error) {
+    for _, flow := range(gc.Flows) {
+        valid, err = flow.Validate()
+    }
+    goslogger.Loggo.Debug("finished validating config",
+        "valid", valid, "error", err)
+    return valid, err
+
 }
