@@ -109,6 +109,7 @@ output_file: "~/.aws/credentials"
 flows:
 - name: sample-permanent-creds-mfa
   permanent:
+    profile_name: giam
     mfa:
       serial:
         source: config
@@ -151,6 +152,9 @@ flows:
   #  flow provided by AWS (e.g., ENV vars, instance-profile, etc)
   session_duration_seconds: 8600 # if you want every mapping to try and use the parent Flow's session duration you can set it here
   permanent:
+    # profile_name refers to the profile entry in your AWS credentials file that will be used
+    #  to assume the primary_assumptions
+    profile_name: seedprofile 
     # mfa section being present will force the starter creds to first
     #  get an mfa enabled session using the provided serial and token
     #  before attempting to assume roles in the primary assumptions
